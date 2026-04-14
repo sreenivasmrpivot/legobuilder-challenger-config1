@@ -1,0 +1,1 @@
+# legobuilder-challenger-config1
