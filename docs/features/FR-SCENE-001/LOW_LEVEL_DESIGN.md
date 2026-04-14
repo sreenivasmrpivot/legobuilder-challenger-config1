@@ -1,179 +1,117 @@
 # Low-Level Design: FR-SCENE-001 — 3D Scene Rendering
 
-**FR-ID:** FR-SCENE-001
-**Issue:** #8
-**Title:** Implement 3D Scene Rendering with R3F Canvas, Lighting & OrbitControls
-**Priority:** P0
-**Design Agent:** Spectra Design Agent
+**Issue:** #8  
+**FR-ID:** FR-SCENE-001  
+**Title:** Implement 3D Scene Rendering with R3F Canvas, Lighting & OrbitControls  
+**Branch:** `feature/8-3d-scene-rendering-design`  
+**Design Agent:** design-agent  
 **Date:** 2025-06-17
 
 ---
 
 ## 1. Overview
 
-This LLD defines the implementation details for the foundational 3D scene rendering component of the LEGO Builder Web App. It specifies the React Three Fiber (R3F) canvas configuration, lighting setup, camera controls, and integration points with other feature modules.
-
 ### 1.1 Scope
 
-- Replace `src/components/Scene3D/Scene3D.tsx` stub with full R3F implementation
-- Configure `<Canvas>` with proper camera, shadows, and WebGL settings
-- Add ambient and directional lighting
-- Add ground grid helper
-- Configure OrbitControls with LEFT mouse button freed for brick placement
-- Mount placeholder components for `GridPlane` (FR-BRICK-001) and `InstancedBricks` (FR-PERF-001)
-- Register global WebGL error handler in `src/main.tsx`
+This LLD defines the implementation details for **FR-SCENE-001**, which establishes the 3D scene rendering foundation using React Three Fiber (R3F). The scope includes:
+
+- R3F `<Canvas>` configuration (camera, shadows, antialiasing)
+- Lighting setup (ambient + directional with shadows)
+- Ground grid visualization
+- Camera controls via `OrbitControls` with mouse button configuration to reserve LEFT button for brick placement
+- Integration points for `GridPlane` (click target), `InstancedBricks` (brick rendering), and `GhostBrick` (placement preview)
+- Global WebGL error detection and reporting
 
 ### 1.2 Out of Scope
 
-- Brick placement logic (handled by FR-BRICK-001)
-- Instanced mesh rendering optimization (handled by FR-PERF-001)
-- Color palette or brick type selection (handled by FR-BRICK-002, FR-BRICK-003)
-- Toolbar or UI controls (handled by FR-TOOL-001, FR-TOOL-002)
-- Persistence or export (handled by FR-PERS-001, FR-PERS-002, FR-SHARE-001)
+- Brick placement logic (FR-BRICK-001)
+- Brick color selection (FR-BRICK-002)
+- Brick type selection (FR-BRICK-003)
+- Persistence (FR-PERS-001/002)
+- Export/Import (FR-SHARE-001)
+- Instanced rendering optimization (FR-PERF-001) — although `InstancedBricks` component is included as part of the scene, its internal optimization is covered in a separate LLD.
+
+### 1.3 References
+
+- PRD: `docs/PRD.md` (FR-SCENE-001 acceptance criteria)
+- Technical Architecture: `docs/TECHNICAL_ARCHITECTURE.md` (Section 2.3, 3.1–3.4, 4.1)
+- Issue #8: Full implementation scope and test IDs
+- Tech Stack: `docs/tech_stack.yaml` (React 18, R3F 8, Drei 9, Three.js 0.165.x)
 
 ---
 
-## 2. Component Architecture
+## 2. System Context
 
-### 2.1 Scene3D Component Structure
-
-```typescript
-// src/components/Scene3D/Scene3D.tsx
-import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Grid } from '@react-three/drei';
-import { GridPlane } from './GridPlane';         // FR-BRICK-001 stub
-import { InstancedBricks } from './InstancedBricks'; // FR-PERF-001 stub
-
-export function Scene3D() {
-  return (
-    <Canvas
-      camera={{ position: [10, 10, 10], fov: 50 }}
-      gl={{ antialias: true }}
-      shadows
-    >
-      {/* Lighting */}
-      <ambientLight intensity={0.6} />
-      <directionalLight
-        position={[10, 20, 10]}
-        intensity={0.8}
-        castShadow
-      />
-
-      {/* Grid helper (visual only) */}
-      <Grid
-        args={[20, 20]}
-        cellColor="#888888"
-        sectionColor="#444444"
-      />
-
-      {/* Interaction layer */}
-      <GridPlane />        {/* Clickable plane for brick placement */}
-      <InstancedBricks /> {/* Instanced mesh renderer for placed bricks */}
-
-      {/* Camera controls */}
-      <OrbitControls
-        mouseButtons={{
-          LEFT: undefined,   // Free LEFT for brick placement
-          MIDDLE: 1,         // MIDDLE = dolly/zoom
-          RIGHT: 2,          // RIGHT = pan
-        }}
-        enableDamping
-      />
-    </Canvas>
-  );
-}
+```mermaid
+flowchart TD
+    A[User] --> B[App]
+    B --> C[Scene3D Component]
+    C --> D[R3F Canvas]
+    D --> E[Three.js Scene]
+    E --> F[Lighting: Ambient + Directional]
+    E --> G[Grid Helper]
+    E --> H[GridPlane: click target]
+    E --> I[InstancedBricks: brick meshes]
+    E --> J[GhostBrick: preview]
+    E --> K[OrbitControls: camera]
+    H --> L[Zustand store: placeBrick]
+    I --> L
+    L --> M[Scene re-render]
 ```
 
-### 2.2 Dependencies
-
-| Dependency | Version | Purpose |
-|------------|---------|---------|
-| `@react-three/fiber` | 8.x | React renderer for Three.js |
-| `@react-three/drei` | 9.x | Helper components (OrbitControls, Grid) |
-| `three` | 0.165.x | Core 3D engine (transitive) |
-| `react` | 18.x | UI framework |
-| `typescript` | 5.x | Type safety |
-
-### 2.3 Interfaces
-
-#### Canvas Props (from R3F)
-
-```typescript
-interface CanvasProps {
-  camera?: { position: [number, number, number]; fov: number };
-  gl?: { antialias: boolean };
-  shadows?: boolean;
-  children?: React.ReactNode;
-}
-```
-
-#### OrbitControls Props (from Drei)
-
-```typescript
-interface OrbitControlsProps {
-  mouseButtons?: {
-    LEFT: number | undefined;  // undefined = not used
-    MIDDLE: number;
-    RIGHT: number;
-  };
-  enableDamping?: boolean;
-}
-```
+The `Scene3D` component is the root of the 3D view. It owns the R3F Canvas and sets up the Three.js scene graph. It does **not** handle user input directly; that is delegated to child meshes (e.g., `GridPlane` for placement, `InstancedBricks` for brick selection). The component integrates with the global Zustand store (`useBrickStore`) to read brick data and trigger re-renders.
 
 ---
 
-## 3. Data Models
+## 3. Component Architecture
 
-### 3.1 Zustand Store (Shared)
+### 3.1 Component Tree
 
-The `useBrickStore` holds the application state. Scene3D does not directly modify the store but subscribes to `bricks` to render via `InstancedBricks`.
-
-```typescript
-// src/store/types.ts (referenced)
-export interface Brick {
-  id: string;           // uuid
-  x: number;            // grid X (integer)
-  y: number;            // grid Y (always 0 for MVP)
-  z: number;            // grid Z (integer)
-  type: BrickType;      // '1x1' | '1x2' | '2x2' | '2x4'
-  colorId: string;      // references LEGO_COLORS[id]
-  rotation: number;     // 0 | 90 | 180 | 270 (degrees around Y-axis)
-}
-
-export interface BrickStore {
-  bricks: Brick[];
-  activeTool: Tool;           // 'place' | 'delete'
-  activeColorId: string;      // default: 'bright-red'
-  activeBrickType: BrickType; // default: '1x1'
-  notification: string | null;
-  // actions...
-}
+```
+<Scene3D>
+  <Canvas camera={{ position: [10, 10, 10], fov: 50 }} gl={{ antialias: true }} shadows>
+    <ambientLight intensity={0.6} />
+    <directionalLight position={[10, 20, 10]} intensity={0.8} castShadow />
+    <Grid args={[20, 20]} cellColor="#888" sectionColor="#444" />
+    <GridPlane />
+    <InstancedBricks />
+    <GhostBrick />
+    <OrbitControls mouseButtons={{ LEFT: undefined, MIDDLE: 1, RIGHT: 2 }} enableDamping />
+  </Canvas>
+</Scene3D>
 ```
 
-### 3.2 Brick Catalog (Domain)
+### 3.2 Component Responsibilities
 
-```typescript
-// src/domain/brickCatalog.ts
-export interface BrickDefinition {
-  type: BrickType;
-  label: string;
-  width: number;   // grid units (X)
-  depth: number;   // grid units (Z)
-  height: number;  // grid units (Y) — always 1 for MVP
-  geometry: THREE.BoxGeometry;
-}
+| Component | Responsibility | Key Props / State |
+|-----------|----------------|-------------------|
+| `Scene3D` | Creates Canvas, configures scene-wide settings (shadows, antialias), composes child 3D elements. | None (static) |
+| `GridPlane` | Invisible mesh that receives pointer events for brick placement. Calls `store.placeBrick()` on `onPointerDown`. | None (reads store for active tool/color/type) |
+| `InstancedBricks` | Renders all placed bricks using `THREE.InstancedMesh` per brick type. Subscribes to `store.bricks`. | `bricks` from store |
+| `GhostBrick` | Semi-transparent preview of the brick that follows the cursor while in Place mode. Uses `useRef` for position to avoid store churn. | Active brick type/color from store |
+| `OrbitControls` | Handles camera orbit, zoom, pan. Configured to free LEFT mouse button for placement. | `mouseButtons` config |
 
-export const BRICK_CATALOG: Record<BrickType, BrickDefinition> = {
-  '1x1': { type: '1x1', label: '1×1', width: 1, depth: 1, height: 1,
-           geometry: new THREE.BoxGeometry(0.95, 0.95, 0.95) },
-  '1x2': { type: '1x2', label: '1×2', width: 1, depth: 2, height: 1,
-           geometry: new THREE.BoxGeometry(0.95, 0.95, 1.95) },
-  '2x2': { type: '2x2', label: '2×2', width: 2, depth: 2, height: 1,
-           geometry: new THREE.BoxGeometry(1.95, 0.95, 1.95) },
-  '2x4': { type: '2x4', label: '2×4', width: 2, depth: 4, height: 1,
-           geometry: new THREE.BoxGeometry(1.95, 0.95, 3.95) },
-};
-```
+### 3.3 Interfaces (Props & Callbacks)
+
+All components are internal to the `Scene3D` module and share access to the global `useBrickStore`. No external props are required.
+
+**GridPlane**
+
+- **Store dependencies:** `activeTool`, `activeBrickType`, `activeColorId`
+- **Actions:** `placeBrick(x, z)` (Y is always 0)
+- **Events:** `onPointerDown` (R3F `ThreeEvent<PointerEvent>`) → `snapToGrid(e.point)` → `store.placeBrick(snappedX, 0, snappedZ)`
+
+**InstancedBricks**
+
+- **Store dependencies:** `bricks`
+- **Rendering:** Groups bricks by `type`, creates one `InstancedMesh` per type with count = number of bricks of that type.
+- **Update cycle:** `useEffect` on `bricks` builds instance matrices and colors. Calls `mesh.instanceMatrix.needsUpdate = true` and `mesh.instanceColor.needsUpdate = true`.
+
+**GhostBrick**
+
+- **Store dependencies:** `activeTool` (only visible in Place mode), `activeBrickType`, `activeColorId`
+- **Position:** Derived from `useGridInteraction` hook that tracks mouse position in world space (via raycaster on an invisible plane).
+- **Rendering:** Single `mesh` with `meshBasicMaterial` (transparent) and geometry from `BRICK_CATALOG`.
 
 ---
 
@@ -184,271 +122,177 @@ export const BRICK_CATALOG: Record<BrickType, BrickDefinition> = {
 ```mermaid
 sequenceDiagram
     participant U as User
-    participant A as App.tsx
+    participant A as App
     participant S as Scene3D
-    participant C as R3F Canvas
-    participant L as Three.js Renderer
-
-    U->>A: Load app
-    A->>S: Render <Scene3D />
-    S->>C: Create <Canvas> with camera, gl, shadows
-    C->>L: Initialize WebGL context
-    L-->>C: WebGL context ready
-    C->>S: Mount children
-    S->>S: Render <ambientLight>, <directionalLight>
-    S->>S: Render <Grid> helper
-    S->>S: Render <GridPlane /> (FR-BRICK-001)
-    S->>S: Render <InstancedBricks /> (FR-PERF-001)
-    S->>S: Render <OrbitControls />
-    C-->>U: 3D scene visible
+    participant C as Canvas (R3F)
+    participant T as Three.js
+    U->>A: mount
+    A->>S: render
+    S->>C: create <Canvas>
+    C->>T: init WebGL context
+    S->>T: add ambientLight
+    S->>T: add directionalLight (shadows)
+    S->>T: add Grid helper
+    S->>T: add GridPlane mesh
+    S->>T: add InstancedBricks (empty)
+    S->>T: add GhostBrick (hidden)
+    S->>T: add OrbitControls
+    C->>U: scene ready
 ```
 
-### 4.2 Brick Placement Event Flow
+### 4.2 Brick Placement Interaction
 
 ```mermaid
 sequenceDiagram
     participant U as User
-    participant C as Canvas (DOM)
-    participant GP as GridPlane (R3F mesh)
-    participant S as Scene3D / GridPlane handler
-    participant Store as useBrickStore
+    participant C as Canvas
+    participant GP as GridPlane
+    participant S as store
     participant IB as InstancedBricks
+    U->>C: pointerdown on grid
+    C->>GP: onPointerDown(ThreeEvent)
+    GP->>GP: snapToGrid(e.point) -> (x, z)
+    GP->>S: placeBrick(x, 0, z)
+    S->>S: add brick to array
+    S->>IB: re-render (bricks changed)
+    IB->>IB: update instance matrices/colors
+    IB->>T: render scene
+    T->>U: brick appears
+```
 
-    U->>C: Click on canvas (pointerdown)
-    C->>GP: R3F raycast intersects GridPlane
-    GP->>S: onPointerDown(ThreeEvent)
-    S->>S: e.point (THREE.Vector3) → snapToGrid()
-    S->>Store: placeBrick(x, 0, z)
-    Store-->>S: bricks updated
-    S->>IB: Re-render (reactivity)
-    IB->>IB: Update instance matrices
-    IB-->>U: Brick appears in scene
+### 4.3 WebGL Error Detection
+
+```mermaid
+sequenceDiagram
+    participant T as Three.js/WebGL
+    participant W as window
+    participant H as Handler
+    T->>W: error event (WebGL context lost, shader error)
+    W->>H: window.__legoBuilderErrors.push(msg)
+    H->>S: (optional) set error state
+    Note over H: E2E tests read window.__legoBuilderErrors
 ```
 
 ---
 
-## 5. Error Handling Strategy
+## 5. Data Models
 
-### 5.1 WebGL Context Loss
+### 5.1 Scene Configuration (internal constants)
 
-**Detection:** R3F fires `gl` context loss events on the Canvas.
-
-**Handling:**
-- Register global error handlers in `src/main.tsx`:
-  ```typescript
-  window.addEventListener('error', (event) => {
-    if (event.message.includes('WebGL')) {
-      window.__legoBuilderErrors?.push(event.message);
-    }
-  });
-  ```
-- For context loss, show a user-friendly message: "WebGL context lost. Please refresh the page."
-- Do not attempt auto-recovery; context restoration is unreliable.
-
-### 5.2 Three.js Resource Disposal
-
-**Rule:** Three.js does NOT auto-dispose geometries and materials.
-
-**Enforcement:**
-- In `InstancedBricks.tsx` (FR-PERF-001), on unmount:
-  ```typescript
-  useEffect(() => {
-    return () => {
-      geometry.dispose();
-      // material is shared; not disposed here
-    };
-  }, []);
-  ```
-- The `BRICK_CATALOG` geometries are module-level singletons and live for the app lifetime; no disposal needed.
-
-### 5.3 OrbitControls Configuration Errors
-
-**Risk:** Misconfiguration could block LEFT mouse for brick placement.
-
-**Validation:**
-- Unit test: verify `OrbitControls` props include `mouseButtons={{ LEFT: undefined }}`
-- E2E test: simulate left-click on canvas and verify brick placement still works
-
-### 5.4 InstancedMesh Count Overflow
-
-**Risk:** Adding more bricks than the `count` argument silently fails.
-
-**Mitigation:**
-- In `InstancedBricks.tsx`, set `count = Math.max(bricks.length, 1)` on each render.
-- For production, consider pre-allocating a large count (e.g., 1000) and recreating mesh when exceeded, or use a dynamic allocation strategy (FR-PERF-001 implementation).
-
----
-
-## 6. Security Considerations
-
-### 6.1 Content Security Policy (CSP)
-
-**Recommendation:** Deploy with CSP headers to mitigate XSS.
-
-```nginx
-# nginx.conf
-add_header Content-Security-Policy
-  "default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; worker-src blob:";
-```
-
-- `'unsafe-eval'` required for Vite dev and some Three.js builds; consider CSP nonce in production if feasible.
-- `worker-src blob:` allows Web Workers if used later.
-
-### 6.2 XSS via JSON Import
-
-**Risk:** Importing malicious JSON could inject script if data is used in `innerHTML`.
-
-**Mitigation:**
-- In `exportService.ts`, strictly validate imported JSON schema.
-- Sanitize string fields: limit length, strip HTML tags.
-- Never use imported data in `dangerouslySetInnerHTML` or `eval()`.
-
-### 6.3 No External Data Transmission
-
-**Requirement:** NFR-SEC-001 — all model data stays in browser.
-
-**Enforcement:**
-- No `fetch()` or `XMLHttpRequest` calls in FR-SCENE-001.
-- Verify via CI: network tab audit in E2E tests shows zero outbound requests containing model data.
-
----
-
-## 7. Performance Considerations
-
-### 7.1 FPS Targets
-
-- ≥ 60 FPS with 100 bricks (baseline)
-- ≥ 30 FPS with 500 bricks (NFR-PERF-001)
-
-### 7.2 Optimization Path
-
-1. **Initial implementation:** Simple `InstancedBricks` with per-frame matrix updates (as shown in TECHNICAL_ARCHITECTURE.md).
-2. **If FPS < target:** Implement FR-PERF-001 optimizations:
-   - Use `useMemo` for geometry and material to avoid recreation
-   - Batch updates: only mark `instanceMatrix.needsUpdate` when bricks change
-   - Consider frustum culling (Three.js does this automatically)
-   - Reduce shadow map resolution if needed
-
-### 7.3 Memory Management
-
-- Dispose geometries on component unmount (see §5.3).
-- Avoid creating new `THREE.Matrix4` or `THREE.Color` objects inside render loops; reuse instances.
-
----
-
-## 8. Testing Strategy
-
-### 8.1 Unit Tests (Vitest)
-
-| Test ID | Description |
-|---------|-------------|
-| T-FE-SCENE-001-01 | Scene renders without WebGL errors |
-| T-FE-SCENE-001-02 | Camera orbit controls are present |
-
-**Implementation:**
 ```typescript
-// src/tests/unit/Scene3D.test.tsx
-import { describe, it, expect } from 'vitest';
-import { render } from '@testing-library/react';
-import { Scene3D } from '../../components/Scene3D/Scene3D';
+// Scene3D constants
+const CAMERA_CONFIG = {
+  position: [10, 10, 10] as [number, number, number],
+  fov: 50,
+};
 
-describe('Scene3D', () => {
-  it('T-FE-SCENE-001-01: renders without WebGL errors', () => {
-    const { container } = render(<Scene3D />);
-    const canvas = container.querySelector('canvas');
-    expect(canvas).toBeTruthy();
-    // Check no errors in window.__legoBuilderErrors
-    expect(window.__legoBuilderErrors).toHaveLength(0);
-  });
+const LIGHTING = {
+  ambient: { intensity: 0.6 },
+  directional: { position: [10, 20, 10] as [number, number, number], intensity: 0.8, castShadow: true },
+};
 
-  it('T-FE-SCENE-001-02: contains OrbitControls with LEFT freed', () => {
-    const { container } = render(<Scene3D />);
-    // Verify OrbitControls component is present (via R3F scene graph)
-    // This may require accessing the Three.js scene directly
-    // For unit test, we can mock OrbitControls and check props
-  });
+const GRID_CONFIG = {
+  size: 20,
+  divisions: 20,
+  cellColor: '#888',
+  sectionColor: '#444',
+};
+
+const ORBIT_CONTROLS_CONFIG = {
+  mouseButtons: { LEFT: undefined, MIDDLE: 1, RIGHT: 2 },
+  enableDamping: true,
+};
+```
+
+These values are hardcoded in `Scene3D.tsx` per the Tech Arch. They may be exposed as configurable in future FRs.
+
+### 5.2 Store State (shared)
+
+The `useBrickStore` state is defined in `docs/TECHNICAL_ARCHITECTURE.md` Section 2.2. `Scene3D` components read from the store but do not modify it directly except `GridPlane` calling `placeBrick`.
+
+---
+
+## 6. Error Handling Strategy
+
+| Error Scenario | Detection | Handling | User Impact |
+|----------------|-----------|----------|-------------|
+| WebGL context loss | `window.addEventListener('error')` capturing WebGL/THREE errors | Errors logged to `window.__legoBuilderErrors`; UI may show generic error if critical | Scene may freeze or go blank; user can reload |
+| Geometry/material leaks | Manual code review; `useEffect` cleanup in components that create geometries | Call `geometry.dispose()` and `material.dispose()` on unmount (e.g., `GhostBrick`) | Memory growth over time; eventual slowdown |
+| Invalid brick placement (duplicate) | `isCellOccupied()` check in `placeBrick` action | Silently reject; no UI error (spec says visual indicator of occupied cell) | User sees no new brick; may be confused if no feedback |
+| InstancedMesh count overflow | `bricks.length > current mesh count` | Recreate mesh with larger count (or pre-allocate large count) | Performance hiccup during rebuild; eventual correct rendering |
+
+**Global Error Handler** (in `src/main.tsx`):
+
+```typescript
+window.addEventListener('error', (event) => {
+  const msg = event.message;
+  if (msg.includes('WebGL') || msg.includes('THREE')) {
+    window.__legoBuilderErrors.push(msg);
+  }
 });
 ```
 
-### 8.2 Behavioral Tests (Vitest + RTL)
-
-| Test ID | Description |
-|---------|-------------|
-| T-FE-SCENE-001-03 | Scene renders grid plane (full app, no mocked stores) |
-
-**Implementation:**
-```typescript
-// src/tests/behavioral/Scene3D.behavioral.test.tsx
-import { describe, it, expect } from 'vitest';
-import { render } from '@testing-library/react';
-import { App } from '../../App';
-
-describe('Scene3D Behavioral', () => {
-  it('T-FE-SCENE-001-03: grid plane visible in full app', () => {
-    const { container } = render(<App />);
-    const canvas = container.querySelector('canvas');
-    expect(canvas).toBeTruthy();
-    // Verify Grid helper rendered (check scene graph)
-  });
-});
-```
-
-### 8.3 E2E Tests (Playwright)
-
-| Test ID | Description |
-|---------|-------------|
-| T-E2E-SCREENSHOT-001-01 | Brick placement screenshot comparison |
-| T-E2E-SCREENSHOT-001-02 | Delete brick screenshot comparison |
-
-These tests are implemented in FR-BRICK-001 and FR-TOOL-002 but depend on FR-SCENE-001 being functional.
+E2E tests will assert `window.__legoBuilderErrors.length === 0` after normal interactions.
 
 ---
 
-## 9. Implementation Checklist
+## 7. Security Considerations
 
-- [ ] Create `src/components/Scene3D/Scene3D.tsx` with R3F Canvas
-- [ ] Configure camera: `position: [10, 10, 10]`, `fov: 50`
-- [ ] Enable `gl={{ antialias: true }}` and `shadows`
-- [ ] Add `<ambientLight intensity={0.6} />`
-- [ ] Add `<directionalLight position={[10, 20, 10]} intensity={0.8} castShadow />`
-- [ ] Add `<Grid args={[20, 20]} cellColor="#888" sectionColor="#444" />`
-- [ ] Add `<GridPlane />` placeholder (FR-BRICK-001 stub)
-- [ ] Add `<InstancedBricks />` placeholder (FR-PERF-001 stub)
-- [ ] Add `<OrbitControls mouseButtons={{ LEFT: undefined, MIDDLE: 1, RIGHT: 2 }} enableDamping />`
-- [ ] Register global WebGL error handler in `src/main.tsx`
-- [ ] Write unit tests: T-FE-SCENE-001-01, T-FE-SCENE-001-02
-- [ ] Write behavioral test: T-FE-SCENE-001-03
-- [ ] Verify all tests pass
+- **XSS via JSON Import:** The `importModelJSON` function validates the structure and sanitizes string fields (max length, allowed characters). No `eval()` or `innerHTML` used.
+- **CSP:** The app is served with a strict Content Security Policy that disallows inline scripts except for Vite's HMR in development. See `nginx.conf` in Tech Arch.
+- **No External Data:** All data stays in the browser; no network requests for model data in MVP.
+- **Third-Party Libraries:** All dependencies are from npm with locked versions. No dynamic script loading.
+
+---
+
+## 8. Performance Considerations
+
+- **InstancedMesh:** Bricks of the same type are rendered in a single draw call. This is critical for FR-PERF-001.
+- **Re-render minimization:** `GhostBrick` uses `useRef` for its world position to avoid triggering Zustand store updates on every mouse move. Only `placeBrick` commits to store.
+- **R3F re-render control:** R3F automatically re-renders when subscribed store state changes. We keep store updates minimal (only brick array changes) to avoid unnecessary renders.
+- **Geometry reuse:** `BRICK_CATALOG` provides shared `THREE.BoxGeometry` instances; do not create new geometries per brick.
+- **Material reuse:** A single `meshStandardMaterial` is used for all bricks in `InstancedBrickType`; per-instance color is set via `instanceColor`.
+
+---
+
+## 9. Testing Strategy
+
+| Test Level | Scope | Tools | Example Tests |
+|------------|-------|-------|---------------|
+| Unit | Component rendering, store actions | Vitest, React Testing Library | `Scene3D` renders Canvas and lights; `placeBrick` adds brick |
+| Behavioral | Full app integration without mocks | Vitest (jsdom) | Clicking grid in Place mode adds brick to scene graph |
+| E2E | Real browser performance and errors | Playwright | FPS measurement with 500 bricks; `window.__legoBuilderErrors` empty |
+
+**Key Test IDs** (from Issue #8):
+- T-FE-SCENE-001-01: Scene renders without WebGL errors
+- T-FE-SCENE-001-02: Camera orbit controls are present
+- T-FE-SCENE-001-03: Scene renders grid plane (full integration, no mocked stores)
+
+---
+
+## 10. Open Questions & Assumptions
+
+| Question | Assumption / Resolution |
+|----------|-------------------------|
+| Should `GhostBrick` snap to grid in real-time? | Yes, it should show the exact grid cell where the brick will be placed. Implementation uses `snapToGrid` on the raycaster intersection point. |
+| How to handle `OrbitControls` damping? | `enableDamping: true` is set; the `<Canvas>` must call `useFrame` to update controls: `<OrbitControls />` automatically integrates with R3F's render loop. |
+| What if WebGL is not supported? | The app will show a blank canvas; we could add a fallback message but it's out of scope for MVP (assume WebGL 2.0 capable browser). |
+| Should `GridPlane` be visible? | No, it's an invisible mesh (`<mesh visible={false}>`) that receives pointer events. The visible grid is the `Grid` helper from Drei. |
+
+---
+
+## 11. Implementation Checklist
+
+- [ ] Create `src/components/Scene3D/Scene3D.tsx` with Canvas, lights, Grid, GridPlane, InstancedBricks, GhostBrick, OrbitControls
+- [ ] Implement `GridPlane` with `onPointerDown` handler that calls `store.placeBrick` after snapping
+- [ ] Ensure `OrbitControls` has `mouseButtons={{ LEFT: undefined }}` to free LEFT button
+- [ ] Verify `InstancedBricks` updates correctly when `store.bricks` changes
+- [ ] Add global error handler in `src/main.tsx` to populate `window.__legoBuilderErrors`
+- [ ] Write unit tests for `Scene3D` rendering (lights, grid present)
+- [ ] Write behavioral test for grid click → brick placed
+- [ ] Write E2E test for FPS ≥ 30 with 500 bricks and zero WebGL errors
 - [ ] Code review and PR merge
 
 ---
 
-## 10. Open Questions / Assumptions
-
-| ID | Question | Assumption / Resolution |
-|----|----------|-------------------------|
-| A1 | Grid size? | 20×20 grid units (matches `Grid args={[20, 20]}`) |
-| A2 | Shadow map resolution? | Default (1024×1024) — can be tuned later if performance issues |
-| A3 | Background color? | Default transparent (shows HTML background) — can be set via `gl={{ alpha: true }}` |
-| A4 | Should GridPlane be invisible? | Yes — invisible mesh that receives pointer events for placement |
-| A5 | Should we dispose `BRICK_CATALOG` geometries? | No — they are module-level singletons for app lifetime |
-
----
-
-## 11. References
-
-- **TECHNICAL_ARCHITECTURE.md** — Section 2.3 (Scene3D.tsx example), Section 3 (Framework Runtime Contracts)
-- **PRD.md** — FR-SCENE-001 acceptance criteria
-- **React Three Fiber Docs** — https://docs.pmnd.rs/react-three-fiber/getting-started/introduction
-- **Drei OrbitControls** — https://docs.pmnd.rs/drei/orbit-controls
-
----
-
-## Appendix: Mermaid Diagram Legend
-
-```mermaid
-graph TD
-    A[Component] --> B[Dependency]
-    style A fill:#e1f5fe
-    style B fill:#f3e5f5
-```
+*End of LLD*
