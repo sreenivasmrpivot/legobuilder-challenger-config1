@@ -6,6 +6,7 @@ import { LEGO_COLORS } from '../domain/colorPalette';
  * Export/Import service - data layer.
  * FR-SHARE-001: export as versioned JSON, import with validation
  * CLR-05: invalid/malformed JSON shows error, does not corrupt scene
+ * NFR-SEC-002: sanitize all imported fields to prevent XSS
  */
 
 const EXPORT_VERSION = '1.0.0';
@@ -19,6 +20,11 @@ export interface ExportedModel {
   bricks: Brick[];
 }
 
+/**
+ * Export the current model as a versioned JSON file download.
+ * FR-SHARE-001: triggers browser file download with all brick data.
+ * Cross-browser: URL.createObjectURL + anchor click works in all modern browsers.
+ */
 export function exportModelJSON(bricks: Brick[]): void {
   const model: ExportedModel = {
     version: EXPORT_VERSION,
@@ -35,6 +41,12 @@ export function exportModelJSON(bricks: Brick[]): void {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Import a model from a JSON string.
+ * FR-SHARE-001: validates format, sanitizes all fields.
+ * NFR-SEC-002: allowlist validation prevents XSS via type/colorId/rotation.
+ * CLR-05: throws on invalid JSON — caller shows error, scene unchanged.
+ */
 export function importModelJSON(jsonString: string): Brick[] {
   let parsed: unknown;
   try {
@@ -55,6 +67,7 @@ export function importModelJSON(jsonString: string): Brick[] {
 
   const rawBricks = (parsed as ExportedModel).bricks;
 
+  // Sanitize every field to prevent XSS and ensure data integrity
   return rawBricks.map((brick): Brick => ({
     id: String(brick.id ?? '').slice(0, 64),
     x: Math.round(Number(brick.x) || 0),

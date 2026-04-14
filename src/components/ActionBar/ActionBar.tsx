@@ -5,10 +5,12 @@ import { exportModelJSON, importModelJSON } from '../../services/exportService';
 
 /**
  * ActionBar - Save / Load / Export / Import buttons.
- * FR-PERS-001: Save model to browser storage.
+ * FR-PERS-001: Save model to browser storage (LocalForage).
  * FR-PERS-002: Load model from browser storage.
- * FR-SHARE-001: Export/Import JSON.
+ * FR-SHARE-001: Export/Import JSON with versioned format.
  * NFR-A11Y-001: keyboard accessible, descriptive aria-labels.
+ * CLR-04: QuotaExceededError handled gracefully.
+ * CLR-05: Import errors shown without corrupting scene.
  */
 export function ActionBar() {
   const bricks = useBrickStore(state => state.bricks);
@@ -16,11 +18,13 @@ export function ActionBar() {
   const setNotification = useBrickStore(state => state.setNotification);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  /** Show a notification that auto-dismisses after `duration` ms. */
   const notify = (msg: string, duration = 3000) => {
     setNotification(msg);
     setTimeout(() => setNotification(null), duration);
   };
 
+  /** FR-PERS-001: Save current model to LocalForage. */
   const handleSave = async () => {
     try {
       await saveModel(bricks);
@@ -35,6 +39,7 @@ export function ActionBar() {
     }
   };
 
+  /** FR-PERS-002: Load model from LocalForage, replace scene. */
   const handleLoad = async () => {
     try {
       const loaded = await loadModel();
@@ -49,10 +54,13 @@ export function ActionBar() {
     }
   };
 
+  /** FR-SHARE-001: Export model as versioned JSON file download. */
   const handleExport = () => exportModelJSON(bricks);
 
+  /** FR-SHARE-001: Trigger hidden file input for JSON import. */
   const handleImport = () => fileInputRef.current?.click();
 
+  /** FR-SHARE-001: Read selected file and import bricks. */
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -63,11 +71,13 @@ export function ActionBar() {
         setBricks(imported);
         notify(`Imported ${imported.length} bricks.`);
       } catch (err) {
+        // CLR-05: show error, do NOT modify scene
         const msg = err instanceof Error ? err.message : 'Unknown error';
         notify(`Import error: ${msg}`, 5000);
       }
     };
     reader.readAsText(file);
+    // Reset input so the same file can be re-imported
     e.target.value = '';
   };
 
@@ -78,14 +88,39 @@ export function ActionBar() {
     <section aria-label="Model actions">
       <h2 className="text-gray-400 text-xs uppercase tracking-wider mb-2">Model</h2>
       <div className="flex flex-col gap-1">
-        <button data-testid="btn-save" onClick={handleSave} className={btnClass}
-          aria-label="Save model to browser storage">Save</button>
-        <button data-testid="btn-load" onClick={handleLoad} className={btnClass}
-          aria-label="Load model from browser storage">Load</button>
-        <button data-testid="btn-export" onClick={handleExport} className={btnClass}
-          aria-label="Export model as JSON file">Export JSON</button>
-        <button data-testid="btn-import" onClick={handleImport} className={btnClass}
-          aria-label="Import model from JSON file">Import JSON</button>
+        <button
+          data-testid="btn-save"
+          onClick={handleSave}
+          className={btnClass}
+          aria-label="Save model to browser storage"
+        >
+          Save
+        </button>
+        <button
+          data-testid="btn-load"
+          onClick={handleLoad}
+          className={btnClass}
+          aria-label="Load model from browser storage"
+        >
+          Load
+        </button>
+        <button
+          data-testid="btn-export"
+          onClick={handleExport}
+          className={btnClass}
+          aria-label="Export model as JSON file"
+        >
+          Export JSON
+        </button>
+        <button
+          data-testid="btn-import"
+          onClick={handleImport}
+          className={btnClass}
+          aria-label="Import model from JSON file"
+        >
+          Import JSON
+        </button>
+        {/* Hidden file input — triggered by Import button */}
         <input
           ref={fileInputRef}
           type="file"

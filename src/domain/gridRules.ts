@@ -9,14 +9,18 @@ import { BRICK_CATALOG } from './brickCatalog';
  * FR-BRICK-003: multi-cell footprint validation
  */
 
-/** Snap a world-space coordinate to the nearest integer grid unit. */
+/**
+ * Snap a world-space coordinate to the nearest integer grid unit.
+ * T-FE-BRICK-001-03: snapCoord(2.7) === 3
+ */
 export function snapCoord(worldCoord: number): number {
   return Math.round(worldCoord);
 }
 
 /**
  * Get all grid cells occupied by a brick at (x, z) with given type and rotation.
- * Rotation 90/270 swaps width and depth.
+ * Rotation 90°/270° swaps width and depth to handle landscape/portrait orientation.
+ * T-FE-BRICK-003-03: 2×4 brick at (0,0) occupies 8 cells
  */
 export function getOccupiedCells(
   x: number,
@@ -26,6 +30,7 @@ export function getOccupiedCells(
 ): Array<{ x: number; z: number }> {
   const def = BRICK_CATALOG[type];
   const cells: Array<{ x: number; z: number }> = [];
+  // Swap width/depth for 90° and 270° rotations
   const [w, d] =
     rotation === 90 || rotation === 270
       ? [def.depth, def.width]
@@ -38,7 +43,11 @@ export function getOccupiedCells(
   return cells;
 }
 
-/** Check if any of the given cells are occupied by existing bricks. */
+/**
+ * Check if any of the given cells are occupied by existing bricks.
+ * Uses a Set for O(1) lookup per cell.
+ * T-FE-BRICK-001-02: duplicate placement rejected
+ */
 export function isCellOccupied(
   cells: Array<{ x: number; z: number }>,
   existingBricks: Brick[]
