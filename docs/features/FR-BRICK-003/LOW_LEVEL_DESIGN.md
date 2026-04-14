@@ -1,172 +1,109 @@
 # Low-Level Design: FR-BRICK-003 — Brick Type Selector
 
-**FR-ID**: FR-BRICK-003  
-**Issue**: #10  
-**Title**: Implement Brick Type Selector with 4 Types (1×1, 1×2, 2×2, 2×4) & Footprint Logic  
-**Priority**: P0  
-**Design Agent**: Spectra Design Agent  
-**Date**: 2025-04-20  
-**Status**: Draft
-
----
-
 ## 1. Overview
 
-This LLD defines the implementation for the Brick Type Selector feature. The feature provides a UI component that allows users to select from 4 brick types (1×1, 1×2, 2×2, 2×4). The selected type becomes the active brick type for all subsequent placements. Multi-cell bricks correctly occupy their full footprint and block those cells from further placement.
+This LLD details the implementation of the **Brick Type Selector** feature, which allows users to choose from four brick types (1×1, 1×2, 2×2, 2×4) and see a visual preview of the selected type. The selected brick type is stored in the global Zustand store and used for all subsequent brick placements. This feature integrates with the existing `brickCatalog.ts` domain module and the `useBrickStore` state management.
 
-The design integrates with:
-- **Zustand store** (`useBrickStore`) for global state (`activeBrickType`)
-- **BRICK_CATALOG** domain module for brick definitions and geometries
-- **Grid rules** (`getOccupiedCells`) for footprint collision detection
-- **BrickTypeSelector** and **BrickTypeOption** UI components
+**Scope:**
+- Create `BrickTypeSelector` container component.
+- Create `BrickTypeOption` presentational component.
+- Add `setActiveBrickType` action to the Zustand store.
+- Ensure the active brick type is used by the placement engine (via store subscription).
 
----
+**Out of Scope:**
+- Modifying `brickCatalog.ts` (assumed complete).
+- Changing footprint logic (handled by `gridRules.ts`).
+- Persistence of `activeBrickType` across sessions (not required).
 
-## 2. API Endpoints (Internal Interfaces)
+## 2. Data Models
 
-Since this is a client-side SPA, "API endpoints" refer to internal module interfaces and event contracts.
-
-### 2.1 Store Actions
+### 2.1 TypeScript Types
 
 ```typescript
-// File: src/store/useBrickStore.ts
-interface BrickStore {
-  // State
-  activeBrickType: BrickType;
-
-  // Actions
-  setActiveBrickType: (type: BrickType) => void;
-}
+// src/store/types.ts (existing)
+export type BrickType = '1x1' | '1x2' | '2x2' | '2x4';
 ```
 
-**Contract**:
-- `setActiveBrickType(type)` updates `activeBrickType` in the Zustand store.
-- Triggers re-render of `BrickTypeSelector` to reflect active state.
-- Used by `BrickTypeOption` components on click.
-
-### 2.2 Domain Module: brickCatalog.ts
+### 2.2 Domain: BrickDefinition
 
 ```typescript
-// File: src/domain/brickCatalog.ts
+// src/domain/brickCatalog.ts (existing)
 export interface BrickDefinition {
   type: BrickType;
   label: string;
-  width: number;   // grid units along X
-  depth: number;   // grid units along Z
-  height: number;  // grid units along Y (always 1 for MVP)
+  width: number;   // grid units (X)
+  depth: number;   // grid units (Z)
+  height: number;  // grid units (Y) — always 1 for MVP
   geometry: THREE.BoxGeometry;
 }
 
-export const BRICK_CATALOG: Record<BrickType, BrickDefinition>;
+export const BRICK_CATALOG: Record<BrickType, BrickDefinition> = {
+  '1x1': { type: '1x1', label: '1×1', width: 1, depth: 1, height: 1,
+            geometry: new THREE.BoxGeometry(0.95, 0.95, 0.95) },
+  '1x2': { type: '1x2', label: '1×2', width: 1, depth: 2, height: 1,
+            geometry: new THREE.BoxGeometry(0.95, 0.95, 1.95) },
+  '2x2': { type: '2x2', label: '2×2', width: 2, depth: 2, height: 1,
+            geometry: new THREE.BoxGeometry(1.95, 0.95, 1.95) },
+  '2x4': { type: '2x4', label: '2×4', width: 2, depth: 4, height: 1,
+            geometry: new THREE.BoxGeometry(1.95, 0.95, 3.95) },
+};
 ```
 
-**Contract**:
-- Provides geometry instances for rendering.
-- Provides width/depth for footprint calculations.
-- Module-level singleton geometries (do not serialize).
-
-### 2.3 Domain Module: gridRules.ts
+### 2.3 Store State & Actions
 
 ```typescript
-// File: src/domain/gridRules.ts
-export function getOccupiedCells(
-  x: number,
-  z: number,
-  type: BrickType,
-  rotation: number
-): Array<{ x: number; z: number }>;
+// src/store/useBrickStore.ts (to be updated)
+interface BrickStore {
+  // ... existing state
+  activeBrickType: BrickType;
+  // ... other state
 
-export function isCellOccupied(
-  cells: Array<{ x: number; z: number }>,
-  existingBricks: Brick[]
-): boolean;
-```
-
-**Contract**:
-- `getOccupiedCells` returns all grid coordinates covered by a brick at given position, type, and rotation.
-- For 2×4 at (0,0) rotation=0: returns 8 cells covering (0,0) to (1,3).
-- For rotation 90°/270°, width and depth are swapped.
-- `isCellOccupied` checks if any of the given cells are already occupied by existing bricks.
-
----
-
-## 3. Data Models
-
-### 3.1 TypeScript Types
-
-```typescript
-// File: src/store/types.ts
-export type BrickType = '1x1' | '1x2' | '2x2' | '2x4';
-
-export interface Brick {
-  id: string;           // uuid v4
-  x: number;            // grid X coordinate (integer)
-  y: number;            // grid Y (always 0 for MVP)
-  z: number;            // grid Z coordinate (integer)
-  type: BrickType;
-  colorId: string;      // references BrickColor.id
-  rotation: number;     // 0 | 90 | 180 | 270 (degrees around Y-axis)
+  // Actions
+  setActiveBrickType: (type: BrickType) => void;
+  // ... other actions
 }
+
+// Default state
+const defaultState = {
+  // ...
+  activeBrickType: '1x1',
+  // ...
+};
 ```
 
-### 3.2 LocalForage Storage Schema
+## 3. Component Architecture
 
-The `Brick` array is stored directly in LocalForage under key `'lego-builder-model'`. No separate schema migration needed for MVP.
+### 3.1 BrickTypeSelector (Container)
 
-```typescript
-// File: src/services/persistenceService.ts
-interface PersistedModel {
-  version: string;      // "1.0.0"
-  savedAt: string;      // ISO 8601 timestamp
-  bricks: Brick[];      // plain objects, no THREE types
-}
-```
+- **File:** `src/components/BrickTypeSelector/BrickTypeSelector.tsx`
+- **Props:** None.
+- **State:** None (uses Zustand store).
+- **Renders:** Four `BrickTypeOption` components, one for each key in `BRICK_CATALOG`.
+- **Store Subscription:** Reads `activeBrickType` to determine which option is active.
+- **Styling:** Flex container with gap, vertical or horizontal layout (to be determined by UI mock).
 
-**Note**: `THREE.BoxGeometry` instances are **not** stored; they are reconstructed from `BRICK_CATALOG` at runtime.
+**Implementation Sketch:**
 
----
-
-## 4. Component Architecture
-
-### 4.1 Component Tree
-
-```text
-<BrickTypeSelector>  (FR-BRICK-003)
-  ├── <BrickTypeOption type="1x1" />
-  ├── <BrickTypeOption type="1x2" />
-  ├── <BrickTypeOption type="2x2" />
-  └── <BrickTypeOption type="2x4" />
-```
-
-### 4.2 BrickTypeSelector.tsx
-
-**File**: `src/components/BrickTypeSelector/BrickTypeSelector.tsx`  
-**Responsibility**: Render the brick type palette with 4 options, highlight the active type.
-
-**Props**: None (reads from Zustand store directly).
-
-**Implementation**:
-
-```typescript
+```tsx
 import React from 'react';
 import { useBrickStore } from '../../store/useBrickStore';
-import { BrickTypeOption } from './BrickTypeOption';
 import { BRICK_CATALOG } from '../../domain/brickCatalog';
+import BrickTypeOption from './BrickTypeOption';
 
-export function BrickTypeSelector() {
+export default function BrickTypeSelector() {
   const activeBrickType = useBrickStore(state => state.activeBrickType);
   const setActiveBrickType = useBrickStore(state => state.setActiveBrickType);
 
-  const brickTypes: BrickType[] = ['1x1', '1x2', '2x2', '2x4'];
+  const brickTypes = Object.keys(BRICK_CATALOG) as BrickType[];
 
   return (
-    <div className="brick-type-selector" role="radiogroup" aria-label="Brick type selection">
+    <div className="brick-type-selector" role="listbox" aria-label="Brick type selection">
       {brickTypes.map(type => (
         <BrickTypeOption
           key={type}
           type={type}
           isActive={type === activeBrickType}
-          onSelect={() => setActiveBrickType(type)}
+          onSelect={setActiveBrickType}
         />
       ))}
     </div>
@@ -174,286 +111,201 @@ export function BrickTypeSelector() {
 }
 ```
 
-**Styling**: Use Tailwind CSS for layout (horizontal flex, spacing, borders).
+### 3.2 BrickTypeOption (Presentational)
 
-**Accessibility**:
-- `role="radiogroup"` on container.
-- Each `BrickTypeOption` has `role="radio"` and `aria-selected`.
-- Keyboard navigation: Arrow keys to change selection (optional for MVP, but recommended).
+- **File:** `src/components/BrickTypeSelector/BrickTypeOption.tsx`
+- **Props:**
+  - `type: BrickType`
+  - `isActive: boolean`
+  - `onSelect: (type: BrickType) => void`
+- **Derived Data:** `definition = BRICK_CATALOG[type]`.
+- **Renders:** A `<button>` element with:
+  - `data-testid={"brick-type-${type}"}` (e.g., `brick-type-1x2`).
+  - `aria-selected={isActive}`.
+  - Visual preview: a `<div>` with inline `style={{ width: ${definition.width * 20}px, height: ${definition.depth * 20}px }}` representing the brick footprint (top-down view). The preview should have a border and a background color (light gray) to show shape.
+  - Label: `definition.label` (e.g., "1×2").
+  - Active state styling: distinct border color (e.g., blue) and maybe a checkmark icon.
+- **Accessibility:** Button is focusable; `aria-selected` indicates state.
 
-### 4.3 BrickTypeOption.tsx
+**Implementation Sketch:**
 
-**File**: `src/components/BrickTypeSelector/BrickTypeOption.tsx`  
-**Responsibility**: Render a single brick type option with visual preview and active highlight.
-
-**Props**:
-- `type: BrickType`
-- `isActive: boolean`
-- `onSelect: () => void`
-
-**Implementation**:
-
-```typescript
+```tsx
 import React from 'react';
+import { BrickType } from '../../store/types';
 import { BRICK_CATALOG } from '../../domain/brickCatalog';
 
-interface BrickTypeOptionProps {
+interface Props {
   type: BrickType;
   isActive: boolean;
-  onSelect: () => void;
+  onSelect: (type: BrickType) => void;
 }
 
-export function BrickTypeOption({ type, isActive, onSelect }: BrickTypeOptionProps) {
-  const def = BRICK_CATALOG[type];
-
-  // Compute preview dimensions (CSS pixels proportional to grid units)
-  const previewWidth = def.width * 20;  // 20px per grid unit
-  const previewHeight = def.depth * 20; // depth is the "length" in 2D preview
+export default function BrickTypeOption({ type, isActive, onSelect }: Props) {
+  const definition = BRICK_CATALOG[type];
+  const previewWidth = definition.width * 20; // 20px per grid unit
+  const previewHeight = definition.depth * 20;
 
   return (
     <button
-      data-testid={`brick-type-${type}`}
-      className={`brick-type-option ${isActive ? 'active' : ''}`}
-      onClick={onSelect}
-      role="radio"
+      data-testid={"brick-type-" + type}
+      className={"brick-type-option " + (isActive ? 'active' : '')}
       aria-selected={isActive}
-      aria-label={`${def.label} brick`}
-      style={{
-        width: previewWidth + 8,  // add padding
-        height: previewHeight + 8,
-      }}
+      onClick={() => onSelect(type)}
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}
     >
       <div
-        className="brick-preview"
-        style={{
+        style={
           width: previewWidth,
           height: previewHeight,
-          backgroundColor: isActive ? '#3b82f6' : '#e5e7eb', // blue when active, gray otherwise
-          border: isActive ? '2px solid #1d4ed8' : '1px solid #9ca3af',
-        }}
-        title={def.label}
+          border: '1px solid #666',
+          backgroundColor: '#ddd',
+          boxSizing: 'border-box'
+        }
       />
-      <span className="brick-label">{def.label}</span>
+      <span>{definition.label}</span>
     </button>
   );
 }
 ```
 
-**Visual Design**:
-- Preview rectangle shows brick footprint (width × depth).
-- Active state: blue border and background.
-- Inactive state: gray border and background.
-- Label below preview shows "1×1", "1×2", etc.
+### 3.3 Store Updates
 
-**Test ID**: `data-testid="brick-type-{type}"` (e.g., `brick-type-1x2`).
-
----
-
-## 5. Sequence Diagrams
-
-### 5.1 User Selects Brick Type
-
-```mermaid
-sequenceDiagram
-  participant U as User
-  participant UI as BrickTypeOption (button)
-  participant Store as Zustand Store
-  participant Selector as BrickTypeSelector
-
-  U->>UI: Click on "2×4" option
-  UI->>Store: setActiveBrickType('2x4')
-  Store-->>UI: state updated
-  Store-->>Selector: re-render (activeBrickType changed)
-  Selector-->>UI: re-render all options (highlight "2×4")
-  UI-->>U: Visual highlight appears on "2×4"
-```
-
-### 5.2 Placement with Multi-Cell Footprint
-
-```mermaid
-sequenceDiagram
-  participant U as User
-  participant Canvas as GridPlane (mesh)
-  participant Store as Zustand Store
-  participant Grid as gridRules.ts
-  participant Bricks as Brick array
-
-  U->>Canvas: Click at world position (x=2, z=3)
-  Canvas->>Store: get activeBrickType, activeColorId
-  Store-->>Canvas: returns '2x4', 'bright-red'
-  Canvas->>Grid: getOccupiedCells(2, 3, '2x4', rotation=0)
-  Grid-->>Canvas: returns 8 cells: (2,3),(2,4),(2,5),(2,6),(3,3),(3,4),(3,5),(3,6)
-  Canvas->>Grid: isCellOccupied(cells, existingBricks)
-  Grid-->>Canvas: false (all free)
-  Canvas->>Store: placeBrick(2, 0, 3, '2x4', 'bright-red', 0)
-  Store->>Bricks: push new Brick
-  Store-->>Canvas: brick added
-  Canvas-->>U: Brick appears in 3D scene
-```
-
----
-
-## 6. Error Handling Strategy
-
-### 6.1 Component-Level Errors
-
-| Error | Handling | User Impact |
-|-------|----------|-------------|
-| `BRICK_CATALOG` undefined or missing type | Throw error in development; fallback to 1×1 in production | Selector shows only 1×1; console error logged |
-| `setActiveBrickType` called with invalid type | TypeScript compile-time check prevents runtime; runtime guard logs warning | No state change; UI remains on previous selection |
-| `useBrickStore` returns undefined (store not initialized) | Guard with default values; show error boundary if critical | UI may not render; error logged |
-
-### 6.2 Footprint Collision
-
-- `isCellOccupied` returns `true` if any cell is already taken.
-- `placeBrick` action checks occupancy before adding.
-- If collision detected, brick is **not placed** and no error shown (silent reject). Optionally, a subtle visual shake animation could indicate invalid placement (deferred to UX iteration).
-
-### 6.3 Storage Errors (Persistence)
-
-Handled in FR-PERS-001, not directly in this feature.
-
----
-
-## 7. Security Considerations
-
-### 7.1 XSS Prevention
-
-- No user-generated HTML in brick type selector.
-- All text content (`def.label`) comes from static `BRICK_CATALOG` (hardcoded).
-- No `dangerouslySetInnerHTML` used.
-
-### 7.2 Input Validation
-
-- `BrickType` is a TypeScript union type; only 4 valid strings accepted.
-- `setActiveBrickType` should guard against invalid values (defensive programming):
+- **File:** `src/store/useBrickStore.ts`
+- **Add Action:**
 
 ```typescript
-function setActiveBrickType(type: BrickType) {
-  if (!VALID_BRICK_TYPES.includes(type)) {
+setActiveBrickType: (type: BrickType) => {
+  // Validate type (optional but safe)
+  if (!Object.keys(BRICK_CATALOG).includes(type)) {
     console.warn('Invalid brick type:', type);
     return;
   }
-  // update state
-}
+  set({ activeBrickType: type });
+},
 ```
 
-### 7.3 Data Serialization
+- **Initialize State:** `activeBrickType: '1x1'` in the default state.
 
-- `Brick` objects stored in LocalForage contain only serializable fields (no `THREE` objects).
-- `BRICK_CATALOG` geometries are module-level singletons and never serialized.
+## 4. Sequence Diagrams
 
----
-
-## 8. Integration Points
-
-### 8.1 Zustand Store
-
-- **Read**: `activeBrickType` from `useBrickStore`.
-- **Write**: `setActiveBrickType` action.
-
-### 8.2 Domain Layer
-
-- **brickCatalog.ts**: Provides `BRICK_CATALOG` for preview dimensions and geometries.
-- **gridRules.ts**: Used by placement engine (FR-BRICK-001) to compute footprint based on `activeBrickType`.
-
-### 8.3 UI Layout
-
-- `BrickTypeSelector` is placed in the sidebar alongside `BrickPalette` and `Toolbar`.
-- See `docs/TECHNICAL_ARCHITECTURE.md` Section 4.1 for component tree.
-
----
-
-## 9. Test Coverage
-
-### 9.1 Unit Tests
-
-| Test ID | Description | Target |
-|---------|-------------|--------|
-| T-FE-BRICK-003-01 | Selecting a brick type updates `activeBrickType` in store | 100% |
-| T-FE-BRICK-003-02 | Brick palette renders 4 brick types | 100% |
-| T-FE-BRICK-003-03 | 2×4 brick occupies correct footprint (8 cells) | 100% |
-| T-FE-BRICK-003-04 | Selected brick type preview is shown in UI | 100% |
-
-### 9.2 Behavioral Tests
-
-- T-FE-BRICK-003-04: Full app render with active brick type selection.
-
-### 9.3 E2E Tests
-
-- T-E2E-HAPPY-001-01: Full first-time build flow includes selecting brick type and placing a 2×4 brick.
-- T-E2E-AFOL-001-01: AFOL build and export flow uses 2×4 brick.
-
----
-
-## 10. Performance Considerations
-
-- `BrickTypeSelector` renders only 4 options — negligible performance impact.
-- `BrickTypeOption` preview uses simple CSS `div` with fixed dimensions — no heavy rendering.
-- `BRICK_CATALOG` geometries are created once at module load and reused — no per-render allocation.
-- Store updates are lightweight; only `activeBrickType` changes.
-
----
-
-## 11. Accessibility (NFR-A11Y-001)
-
-- `BrickTypeSelector` uses `role="radiogroup"` and `aria-label`.
-- Each `BrickTypeOption` uses `role="radio"` and `aria-selected`.
-- Keyboard navigation: Implement arrow key support (left/right) to change selection (recommended for full compliance).
-- Color contrast: Active state uses blue (#3b82f6) with sufficient contrast against white background (≥ 4.5:1).
-- Focus visible: Ensure `:focus-visible` style on buttons.
-
----
-
-## 12. Open Questions / Assumptions
-
-| ID | Question | Assumption / Resolution |
-|----|----------|-------------------------|
-| A1 | Should brick type selection persist across page reloads? | Yes, `activeBrickType` is stored in Zustand; on app load, default is '1x1'. Persistence across reloads would require storing in LocalForage, but not required by FR. |
-| A2 | Can users select brick type while in Delete mode? | Yes, brick type selection is independent of tool mode. |
-| A3 | Should the preview show the current active color? | No, preview shows neutral gray/blue to indicate selection state; actual brick color is shown in the 3D scene and in `BrickPalette`. |
-| A4 | What happens if `BRICK_CATALOG` is missing a type? | The component maps over a hardcoded array `['1x1','1x2','2x2','2x4']`; if catalog entry missing, show placeholder and log error. |
-
----
-
-## 13. Implementation Checklist
-
-- [ ] Create `src/components/BrickTypeSelector/BrickTypeSelector.tsx`
-- [ ] Create `src/components/BrickTypeSelector/BrickTypeOption.tsx`
-- [ ] Verify `src/domain/brickCatalog.ts` contains all 4 types with correct geometries
-- [ ] Add `setActiveBrickType` action to `useBrickStore` if not already present
-- [ ] Integrate `BrickTypeSelector` into sidebar layout (`App.tsx` or layout component)
-- [ ] Add Tailwind CSS classes for styling (or CSS module)
-- [ ] Implement keyboard navigation (arrow keys) for accessibility
-- [ ] Write unit tests: T-FE-BRICK-003-01 through T-FE-BRICK-003-04
-- [ ] Verify behavioral test coverage
-- [ ] Ensure E2E tests cover brick type selection flow
-- [ ] Run lint, typecheck, and tests
-- [ ] Update `docs/features/FR-BRICK-003/LOW_LEVEL_DESIGN.md` with any changes during implementation
-
----
-
-## 14. References
-
-- **PRD**: `docs/PRD.md` — FR-BRICK-003 definition
-- **Technical Architecture**: `docs/TECHNICAL_ARCHITECTURE.md` — Component integration map, stub replacement table
-- **Stub Files**:
-  - `src/components/BrickTypeSelector/BrickTypeSelector.tsx` (stub)
-  - `src/components/BrickTypeSelector/BrickTypeOption.tsx` (stub)
-  - `src/domain/brickCatalog.ts` (stub, already scaffolded)
-- **Related FRs**:
-  - FR-BRICK-001 (Brick Placement) — uses `activeBrickType` and `getOccupiedCells`
-  - FR-PERF-001 (Instanced Rendering) — uses `BRICK_CATALOG` geometries
-
----
-
-## Appendix: Mermaid Diagram Legend
+### 4.1 User Selects a Brick Type
 
 ```mermaid
-graph TD
-    A[Component] --> B[Store]
-    B --> C[Domain Module]
-    C --> D[Three.js]
+sequenceDiagram
+    participant U as User
+    participant BTO as BrickTypeOption
+    participant Store as useBrickStore
+    participant Selector as BrickTypeSelector
+
+    U->>BTO: Click button
+    BTO->>Store: setActiveBrickType(type)
+    Store->>Store: Update state
+    Store-->>BTO: Re-render (isActive changes)
+    BTO->>BTO: Apply active styling
+    Note over BTO: Visual feedback
 ```
 
-This document follows the Spectra LLD scaffold template. All sections are filled with project-specific content.
+### 4.2 Initial Render of Selector
+
+```mermaid
+sequenceDiagram
+    participant App as App
+    participant Selector as BrickTypeSelector
+    participant Store as useBrickStore
+    participant Catalog as BRICK_CATALOG
+
+    App->>Selector: Render
+    Selector->>Store: Subscribe to activeBrickType
+    Store-->>Selector: Current value
+    Selector->>Catalog: Get all brick types
+    Catalog-->>Selector: Array of types
+    loop For each type
+        Selector->>Catalog: Get definition
+        Catalog-->>Selector: BrickDefinition
+        Selector->>BTO: Render BrickTypeOption
+    end
+```
+
+## 5. Error Handling Strategy
+
+- **Invalid brick type:** If `setActiveBrickType` receives a type not in `BRICK_CATALOG`, log a warning and ignore. This should never happen in normal operation because the UI only offers valid types.
+- **Missing catalog:** If `BRICK_CATALOG` is undefined or empty at runtime, the `BrickTypeSelector` should render nothing or a fallback message. This is a development-time error; in production, the module is bundled.
+- **No async operations:** All actions are synchronous; no network or storage errors.
+
+## 6. Security Considerations
+
+- **XSS:** No dynamic HTML generation; all text is static from the catalog or TypeScript literals. React's JSX automatically escapes values.
+- **Input Validation:** The `setActiveBrickType` action validates against known keys (optional). The UI only calls with known types.
+- **No external data:** The brick catalog is a static module; no user-supplied data.
+- **Test IDs:** `data-testid` attributes are safe; they don't introduce security risks.
+
+## 7. Accessibility
+
+- Each `BrickTypeOption` button has `aria-selected` indicating whether it is the active choice.
+- The container has `role="listbox"` and `aria-label="Brick type selection"`.
+- Buttons are focusable via keyboard (native `<button>`).
+- Focus styles should be visible (use Tailwind's `focus:ring` or custom CSS).
+- Labels include the brick type text (e.g., "1×1") for screen readers.
+
+## 8. Testing Strategy
+
+### 8.1 Unit Tests (Vitest)
+
+- **Store:**
+  - `setActiveBrickType('2x4')` updates `activeBrickType` to `'2x4'`.
+  - Default state has `activeBrickType: '1x1'`.
+- **Components:**
+  - `BrickTypeSelector` renders exactly 4 `BrickTypeOption` children.
+  - `BrickTypeOption` displays the correct label for each type.
+  - `BrickTypeOption` applies `active` class when `isActive` is true.
+  - `BrickTypeOption` has correct `data-testid`.
+  - Clicking an option calls `onSelect` with the correct type.
+
+### 8.2 Behavioral Tests (Vitest + RTL)
+
+- Render `App` (or `BrickTypeSelector` in isolation), simulate click on a brick type option, verify store state changes.
+- Verify that after selecting a type, the `activeBrickType` in the store matches.
+
+### 8.3 E2E Tests (Playwright)
+
+- **T-FE-BRICK-003-01:** Select a brick type and verify store update (via UI effect: subsequent placement uses that type).
+- **T-FE-BRICK-003-02:** Brick palette renders 4 brick types.
+- **T-FE-BRICK-003-03:** 2×4 brick occupies correct footprint (this is primarily a gridRules test but depends on correct brick type selection).
+- **T-FE-BRICK-003-04:** Selected brick type preview is shown (the visual highlight on the selected option).
+
+## 9. Implementation Notes
+
+- **Preview dimensions:** Use a scale of 20px per grid unit. For a 2×4 brick, preview size = 40px × 80px. This provides a clear visual distinction.
+- **Active styling:** Use a blue border (`border-blue-500`) and maybe a background change to indicate selection.
+- **Layout:** The selector should be placed in the sidebar, likely below the toolbar. The exact layout (horizontal wrap or vertical stack) will be determined by the overall UI design; implement as a flex container that can be styled via Tailwind classes from the parent.
+- **Integration with placement:** The `useBrickStore`'s `activeBrickType` is already used by the `placeBrick` action (or will be used by the placement engine). Ensure that when a brick is placed, the current `activeBrickType` is read from the store.
+- **No persistence:** `activeBrickType` is not saved to LocalForage; it resets to default on page reload. This is acceptable per the PRD.
+
+## 10. Dependencies
+
+- **React** 18.x
+- **TypeScript** 5.x
+- **Tailwind CSS** 3.x (for styling)
+- **Zustand** 4.x (state management)
+- **Existing modules:**
+  - `src/domain/brickCatalog.ts` (must be present and correct)
+  - `src/store/useBrickStore.ts` (to be updated)
+  - `src/store/types.ts` (contains `BrickType`)
+
+## 11. Open Questions / Assumptions
+
+- **Assumption:** `brickCatalog.ts` already defines the four brick types with correct geometries as shown in the PRD. This LLD does not modify that file.
+- **Assumption:** The store's `placeBrick` action (or the placement engine) reads `activeBrickType` from the store at the time of placement. If not, a small integration step will be needed (outside this LLD's scope? Actually, the placement engine likely already uses the store's activeBrickType; we are adding the selector to set it).
+- **Question:** Should the brick type selector show a preview of the brick's 3D shape? The PRD says "preview of the selected type is shown". Our design uses a 2D top-down rectangle. This is sufficient and consistent with the UI being DOM-based. If a 3D preview is desired, that would require an R3F component, which is more complex. We'll stick with 2D for simplicity unless specified otherwise.
+- **Question:** Should the selector be disabled when not in "Place" mode? Probably not; you can change brick type anytime, even in Delete mode. It's a global setting.
+
+## 12. Acceptance Criteria Mapping
+
+| PRD Acceptance Criteria | Implementation Evidence |
+|-------------------------|-------------------------|
+| Given the brick palette is visible, When the user selects a brick type, Then the active brick type changes and a preview of the selected type is shown. | `BrickTypeSelector` + `BrickTypeOption` with active state and visual preview (2D rectangle). |
+| Given a 2×4 brick is selected, When the user places it on the grid, Then the brick occupies a 2×4 footprint and blocks those cells from further placement. | Store's `activeBrickType` is used by placement engine; `gridRules.getOccupiedCells` uses the brick's type to compute footprint. This is existing logic; the selector merely sets the type. |
+
+---
+
+*Created by Spectra Framework — design-agent*
