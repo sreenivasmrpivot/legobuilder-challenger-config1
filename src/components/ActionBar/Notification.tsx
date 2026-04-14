@@ -3,14 +3,17 @@ import { useBrickStore } from '../../store/useBrickStore';
 /**
  * Notification - success/error feedback overlay.
  * FR-PERS-001: shows success notification after save.
- * NFR-A11Y-001: role="status" for screen reader announcement.
+ * FR-PERS-002: shows "No saved model found" when storage is empty.
+ * FR-SHARE-001: shows import success/error.
+ * NFR-A11Y-001: role="status" aria-live="polite" for screen reader announcement.
  */
 export function Notification() {
   const notification = useBrickStore(state => state.notification);
 
   if (!notification) return null;
 
-  const isError = notification.toLowerCase().startsWith('error');
+  const isError = notification.toLowerCase().startsWith('error') ||
+                  notification.toLowerCase().startsWith('import error');
 
   return (
     <div
