@@ -1,0 +1,430 @@
+# Tech Stack Configuration — LEGO Builder Web App
+#
+# This file defines the TECHNOLOGY CHOICES for the LEGO Builder Web App.
+# It maps to the components defined in docs/NOTIONAL_ARCHITECTURE.md.
+#
+# Document Relationships:
+#   .spectra/constitution.md       → HOW the team works (governance, quality, compliance)
+#   docs/PRD.md                    → WHAT to build (requirements, after clarification)
+#   docs/NOTIONAL_ARCHITECTURE.md  → WHAT structure (logical design)
+#   docs/tech_stack.yaml (this)    → WHICH technologies (framework choices)
+#   docs/TECHNICAL_ARCHITECTURE.md → HOW to implement (technical details)
+
+# =============================================================================
+# PROJECT METADATA
+# =============================================================================
+project:
+  name: "LEGO Builder Web App"
+  version: "0.1.0"
+  description: "Browser-based 3D LEGO building SPA using React Three Fiber. Client-only MVP with LocalForage persistence and JSON export/import."
+  system_type: "Web (Canvas/3D)"
+  deployment_model: "static-spa"
+
+# =============================================================================
+# FRONTEND STACK
+# (This is a client-only SPA — there is no backend service)
+# =============================================================================
+frontend:
+  # Primary language
+  language:
+    name: "TypeScript"
+    version: "5.x"
+    rationale: "Type safety for complex 3D state (brick positions, rotations, types). Catches errors at compile time. Required by React Three Fiber ecosystem."
+
+  # Framework
+  framework:
+    name: "React"
+    version: "18.x"
+    rationale: "Declarative component model maps naturally to 3D scene composition via React Three Fiber. Large ecosystem. Required by R3F."
+
+  # Build tool
+  build_tool:
+    name: "Vite"
+    version: "5.x"
+    rationale: "Fast HMR for development. Optimized production builds with code splitting. Native ESM. Recommended by React Three Fiber community."
+
+  # 3D rendering
+  rendering_3d:
+    name: "React Three Fiber (R3F)"
+    version: "8.x"
+    underlying_engine: "Three.js 0.165.x"
+    helpers: "@react-three/drei 9.x"
+    rationale: "Declarative Three.js in React. Drei provides OrbitControls, Grid, and other helpers out of the box. Industry standard for React + WebGL. Directly addresses FR-SCENE-001, FR-PERF-001."
+
+  # State management
+  state_management:
+    name: "Zustand"
+    version: "4.x"
+    rationale: "Minimal boilerplate. Flat store structure ideal for brick array + active tool/color/type. Excellent TypeScript support. Reactive — R3F canvas re-renders on store change. Directly addresses Scene State Store component."
+
+  # UI styling
+  ui_library:
+    name: "Tailwind CSS"
+    version: "3.x"
+    rationale: "Utility-first. No runtime CSS-in-JS overhead. Accessible component patterns. Sufficient for toolbar, palette, and button UI (NFR-A11Y-001)."
+
+  # Browser storage abstraction
+  browser_storage:
+    name: "LocalForage"
+    version: "1.10.x"
+    rationale: "Abstracts IndexedDB (primary) / WebSQL / localStorage (fallback). Handles larger models than raw localStorage. Promise-based API. Directly addresses FR-PERS-001, FR-PERS-002, NFR-SCALE-001."
+
+  # Package manager
+  package_manager:
+    name: "pnpm"
+    version: "8.x"
+    rationale: "Faster installs, disk-efficient. Strict dependency resolution prevents phantom dependencies."
+
+  # Testing
+  testing:
+    unit_and_component: "Vitest"
+    unit_version: "1.x"
+    component_library: "React Testing Library"
+    component_library_version: "14.x"
+    e2e: "Playwright"
+    e2e_version: "1.x"
+    rationale: "Vitest is Vite-native (fast, no config overhead). React Testing Library enforces behavioral testing (no implementation details). Playwright for E2E, screenshot comparison, and performance measurement. Matches TEST_PLAN.md test categories."
+
+  # Linting / Formatting
+  linter:
+    name: "ESLint + Prettier"
+    eslint_version: "8.x"
+    prettier_version: "3.x"
+    rationale: "Industry standard. ESLint catches React/TypeScript issues. Prettier enforces consistent formatting."
+
+  # Type checking
+  type_checker:
+    name: "tsc (TypeScript compiler)"
+    rationale: "Built into TypeScript. Strict mode enabled."
+
+# =============================================================================
+# BACKEND STACK
+# =============================================================================
+backend:
+  enabled: false
+  rationale: "Client-only MVP. No backend server required. All computation, state, and persistence occur in the browser. Backend can be added in v2 for cloud sync (G-5, NG-1)."
+
+# =============================================================================
+# DATABASE & STORAGE
+# =============================================================================
+database:
+  primary:
+    type: "Browser Storage (LocalForage)"
+    underlying: "IndexedDB (primary) / localStorage (fallback)"
+    rationale: "Client-only MVP. No server-side database. LocalForage provides async API with IndexedDB for models up to 1,000 bricks (NFR-SCALE-001). Save completes within 500ms (FR-PERS-001)."
+
+  vector:
+    type: "none"
+    rationale: "No AI/RAG features in MVP."
+
+  cache:
+    type: "none"
+    rationale: "Client-only SPA. No server-side cache needed. Browser memory serves as runtime cache."
+
+  object_storage:
+    type: "User File System (browser download API)"
+    rationale: "JSON export uses browser Blob + URL.createObjectURL for file download. No cloud storage in MVP (NG-1)."
+
+  messaging:
+    enabled: false
+    rationale: "Client-only SPA. No inter-service messaging needed."
+
+# =============================================================================
+# LLM & AI SERVICES
+# =============================================================================
+llm:
+  enabled: false
+  rationale: "No AI/LLM components in LEGO Builder MVP. All behavior is deterministic. EDD not required. See PRD §2b."
+
+# =============================================================================
+# AGENTIC WORKFLOWS (Customer App AI/Agent Stack)
+# =============================================================================
+agentic_workflows:
+  enabled: false
+  rationale: "No agentic features in LEGO Builder MVP. All business processes (BP-1, BP-2, BP-3) are user-driven with no AI opportunity identified."
+
+  framework:
+    name: "none"
+  llm:
+    provider: "none"
+  orchestration:
+    tool: "none"
+  persistence:
+    tool: "none"
+  tools:
+    mcp_enabled: false
+    tool_registry: "none"
+    external_apis: []
+  human_in_the_loop:
+    enabled: false
+    approval_mechanism: "none"
+  guardrails:
+    content_filtering: false
+    output_validation: false
+    cost_limits: false
+    framework: "none"
+
+# =============================================================================
+# VOICE & COMMUNICATION
+# =============================================================================
+voice_communication:
+  enabled: false
+  rationale: "No voice or real-time communication features in MVP."
+
+# =============================================================================
+# CUSTOMER SUPPORT
+# =============================================================================
+customer_support:
+  enabled: false
+  rationale: "No customer support features in MVP."
+
+# =============================================================================
+# INFRASTRUCTURE & DEPLOYMENT
+# =============================================================================
+infrastructure:
+  # Hosting
+  hosting:
+    type: "Static Site Hosting"
+    provider: "Vercel (primary) / Netlify (alternative)"
+    rationale: "SPA builds to static files. CDN-backed global delivery. 99.9% uptime SLA (NFR-REL-001). Auto-deploy on merge to main (NFR-DEPLOY-001). Preview URLs per PR."
+
+  # Container (for local dev and CI)
+  container:
+    runtime: "Docker"
+    rationale: "Consistent local dev environment. CI runs in Docker. Multi-stage build: Node build stage + nginx production stage."
+    deployment_target: "Static CDN (not Kubernetes for this SPA)"
+    note: "Dockerfile uses multi-stage build: node:20-alpine build stage + nginx:alpine production stage. Exposes port 80."
+
+  # CI/CD
+  ci_cd:
+    platform: "GitHub Actions"
+    rationale: "Native GitHub integration. Free for public repos. Supports Playwright E2E, Vitest unit tests, ESLint, and Vercel/Netlify deploy actions."
+
+  # Secrets management
+  secrets:
+    tool: "GitHub Actions Secrets"
+    rationale: "No runtime secrets needed (client-only app). CI/CD secrets (Vercel token) stored in GitHub Actions."
+
+# =============================================================================
+# OBSERVABILITY & MONITORING
+# =============================================================================
+observability:
+  # Client-side error tracking
+  errors:
+    platform: "Browser Console + Sentry (optional)"
+    rationale: "Client-only app. Browser console captures WebGL errors (KR-1.3). Sentry can be added for production error tracking."
+
+  # Performance monitoring
+  performance:
+    platform: "Browser Performance API + Lighthouse CI"
+    rationale: "FPS measurement via requestAnimationFrame timing (NFR-PERF-001). Lighthouse CI on every PR for load time (NFR-PERF-002)."
+
+  # Uptime monitoring
+  uptime:
+    platform: "Vercel/Netlify built-in + UptimeRobot (optional)"
+    rationale: "Static hosting SLA covers NFR-REL-001. UptimeRobot for external monitoring."
+
+# =============================================================================
+# DEVELOPMENT TOOLS
+# =============================================================================
+development:
+  ide:
+    primary: "VS Code / Cursor"
+
+  local:
+    hot_reload: true
+    dev_server: "Vite dev server (pnpm dev)"
+    containerization: "Docker (optional for local, required for CI)"
+
+  docs:
+    api: "TypeScript types serve as API documentation (no OpenAPI needed for client-only app)"
+
+# =============================================================================
+# COMPONENT-TO-TECHNOLOGY MAPPING
+# (Maps notional architecture components to concrete technologies)
+# =============================================================================
+component_mapping:
+  # Presentation Layer
+  canvas_3d:
+    notional: "3D Canvas (Presentation Layer)"
+    technology: "React Three Fiber 8.x + Three.js 0.165.x + @react-three/drei 9.x"
+    fr_coverage: ["FR-SCENE-001", "FR-BRICK-001", "FR-TOOL-002", "FR-PERF-001"]
+
+  ui_controls:
+    notional: "UI Controls (Presentation Layer)"
+    technology: "React 18.x + Tailwind CSS 3.x"
+    fr_coverage: ["FR-BRICK-002", "FR-BRICK-003", "FR-TOOL-001", "FR-TOOL-002", "FR-TOOL-003", "FR-PERS-001", "FR-PERS-002", "FR-SHARE-001"]
+
+  # Application Layer
+  scene_state_store:
+    notional: "Scene State Store (Application Layer)"
+    technology: "Zustand 4.x"
+    fr_coverage: ["FR-BRICK-001", "FR-BRICK-002", "FR-BRICK-003", "FR-TOOL-001", "FR-TOOL-002", "FR-TOOL-003"]
+
+  brick_placement_engine:
+    notional: "Brick Placement Engine (Application Layer)"
+    technology: "TypeScript (pure functions, no framework dependency)"
+    fr_coverage: ["FR-BRICK-001", "FR-BRICK-003"]
+
+  performance_optimizer:
+    notional: "Performance Optimizer (Application Layer)"
+    technology: "Three.js InstancedMesh + instanceColor BufferAttribute"
+    fr_coverage: ["FR-PERF-001"]
+
+  # Domain Layer
+  brick_catalog:
+    notional: "Brick Catalog (Domain Layer)"
+    technology: "TypeScript constants/enums"
+    fr_coverage: ["FR-BRICK-003"]
+
+  color_palette:
+    notional: "Color Palette (Domain Layer)"
+    technology: "TypeScript constants"
+    fr_coverage: ["FR-BRICK-002"]
+
+  grid_rules:
+    notional: "Grid Rules (Domain Layer)"
+    technology: "TypeScript pure functions"
+    fr_coverage: ["FR-BRICK-001"]
+
+  # Data Layer
+  persistence_manager:
+    notional: "Persistence Manager (Data Layer)"
+    technology: "LocalForage 1.10.x"
+    fr_coverage: ["FR-PERS-001", "FR-PERS-002"]
+
+  export_import_service:
+    notional: "Export/Import Service (Data Layer)"
+    technology: "TypeScript + Browser Blob API + FileReader API"
+    fr_coverage: ["FR-SHARE-001"]
+
+# =============================================================================
+# SPECTRA FRAMEWORK INTEGRATION
+# =============================================================================
+spectra:
+  agents:
+    config_file: "agents/agent-catalog.yaml"
+    template: "AGENTS.md"
+
+  mcp_servers:
+    git: true
+    pm: false
+    ci: true
+
+  traceability:
+    enabled: true
+    commit_validation: true
+
+# =============================================================================
+# MATURITY LEVER
+# =============================================================================
+maturity_lever:
+  maturity_level: 3
+  effective_level: auto
+  convergence_window_days: 30
+  auto_downgrade_on_drop: true
+
+  scorecard_thresholds:
+    level_3:
+      alignment_convergence: 0.60
+      first_pass_success_rate: 0.40
+      spec_quality_score: 0.50
+      behavioral_test_coverage: 0.40
+      cost_efficiency: 1.50
+      okr_alignment: null
+
+# =============================================================================
+# BEHAVIORAL VERIFICATION DASHBOARD
+# =============================================================================
+behavioral_dashboard:
+  enabled: true
+  data_source: "ci_cache"
+  display_language: "business"
+  views:
+    per_pr: true
+    system_health: true
+    feature_completeness: true
+    regression_watch: true
+
+# =============================================================================
+# E2E SYSTEM BEHAVIORAL TESTING
+# =============================================================================
+e2e_testing:
+  enabled: true
+  platforms:
+    web:
+      framework: "playwright"
+      enabled: true
+    mobile:
+      framework: "appium"
+      enabled: false
+    desktop:
+      framework: "playwright"
+      enabled: false
+  ai_test_generation: "none"
+  digital_twin:
+    enabled: false
+    rationale: "Client-only SPA with no external services to mock."
+  visual_regression: true
+  scenario_driven: true
+  run_in_ci: true
+  results_feed_dashboard: true
+
+# =============================================================================
+# REGULATION PACKS
+# =============================================================================
+regulation_packs:
+  enabled: false
+  active_packs: []
+  rationale: "No compliance requirements for MVP (PRD classification: NONE)."
+
+# =============================================================================
+# TECH PACK REFERENCE
+# =============================================================================
+tech_packs:
+  - name: "react-vite-r3f"
+    description: "React + Vite + React Three Fiber SPA"
+    customizations:
+      - "Zustand for state management (not React Query)"
+      - "LocalForage for persistence (not PostgreSQL)"
+      - "Tailwind CSS for styling"
+      - "Vitest for unit/component testing"
+      - "Playwright for E2E testing"
+
+# =============================================================================
+# SKILLS
+# =============================================================================
+skills:
+  governance:
+    - governance-tdd
+    - governance-traceability
+
+  specification:
+    - spec-prd-creation
+    - spec-test-plan
+    - spec-architecture
+
+  review:
+    - review-code-quality
+    - review-alignment
+
+  wisdom:
+    - wisdom-system-design
+    - wisdom-antipatterns
+
+  custom: []
+
+# =============================================================================
+# PROVENANCE
+# =============================================================================
+provenance:
+  spec_linkage_required: true
+  chain_elements:
+    - intent
+    - specification
+    - test
+    - implementation
+    - review
+  drift_on_commit:
+    enabled: true
+    max_latency_seconds: 5
