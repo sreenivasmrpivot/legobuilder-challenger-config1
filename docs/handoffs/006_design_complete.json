@@ -1,0 +1,61 @@
+{
+  "handoff_id": "006_design_complete",
+  "from_agent": "design",
+  "to_agent": "gate-6a-design-review",
+  "timestamp": "2026-04-14T23:55:19Z",
+  "status": "complete",
+  "event": {
+    "event_type": "agent.handoff.completed",
+    "correlation_id": "wf-006",
+    "causation_id": ""
+  },
+  "summary": {
+    "work_completed": "Created low-level design document for FR-BRICK-003 (Brick Type Selector).",
+    "key_findings": [
+      "Feature requires 2D CSS preview for brick types",
+      "Active brick type stored in global Zustand store",
+      "Default brick type is '1x1'"
+    ],
+    "metrics": {}
+  },
+  "human_review_required": [
+    {
+      "item": "Design approval for Brick Type Selector implementation",
+      "reason": "Design must be reviewed before coding begins (Gate 6a)",
+      "severity": "high"
+    }
+  ],
+  "next_agent_context": {
+    "recommended_actions": [
+      "Review the LLD at docs/features/FR-BRICK-003/LOW_LEVEL_DESIGN.md",
+      "Approve the design if it meets acceptance criteria",
+      "If changes are needed, comment on the PR"
+    ],
+    "files_to_read": [
+      "docs/features/FR-BRICK-003/LOW_LEVEL_DESIGN.md",
+      "docs/PRD.md",
+      "docs/TECHNICAL_ARCHITECTURE.md"
+    ]
+  },
+  "workflow_state": {
+    "workflow_type": "greenfield",
+    "current_phase": "design",
+    "completed_phases": ["entry", "research", "architecture", "planning"],
+    "remaining_phases": ["implementation", "evaluation", "release"]
+  },
+  "artifacts": [
+    {
+      "name": "low-level-design",
+      "path": "docs/features/FR-BRICK-003/LOW_LEVEL_DESIGN.md",
+      "type": "design",
+      "description": "Low-level design document for brick type selector feature"
+    }
+  ],
+  "alignment": {
+    "tcu_ids": ["TCU-10"],
+    "forward_pass_score": 0.0,
+    "backward_pass_score": 0.0,
+    "human_score": null,
+    "convergence_score": 0.0
+  }
+}
