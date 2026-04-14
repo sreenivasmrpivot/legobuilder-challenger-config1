@@ -30,7 +30,7 @@ describe('exportService', () => {
     expect(importModelJSON(json)[0].type).toBe('1x1');
   });
 
-  it('T-FE-SHARE-001-01: exportModelJSON triggers download', () => {
+  it('exportModelJSON triggers file download', () => {
     const mockCreateObjectURL = vi.fn(() => 'blob:mock');
     const mockClick = vi.fn();
     global.URL.createObjectURL = mockCreateObjectURL;
@@ -40,5 +40,25 @@ describe('exportService', () => {
     exportModelJSON(sampleBricks);
     expect(mockCreateObjectURL).toHaveBeenCalledWith(expect.any(Blob));
     expect(mockClick).toHaveBeenCalled();
+  });
+
+  it('T-FE-SHARE-001-01: Export produces valid versioned JSON with all brick data', async () => {
+    const mockCreateObjectURL = vi.fn(() => 'blob:mock');
+    const mockRevokeObjectURL = vi.fn();
+    global.URL.createObjectURL = mockCreateObjectURL;
+    global.URL.revokeObjectURL = mockRevokeObjectURL;
+    const mockAnchor = { href: '', download: '', click: vi.fn() } as unknown as HTMLAnchorElement;
+    vi.spyOn(document, 'createElement').mockReturnValueOnce(mockAnchor);
+
+    exportModelJSON(sampleBricks);
+
+    // Get the blob passed to createObjectURL
+    const blob = mockCreateObjectURL.mock.calls[0][0] as Blob;
+    const text = await blob.text();
+    const model = JSON.parse(text);
+
+    expect(model.version).toBe('1.0.0');
+    expect(model.exportedAt).toBeTypeOf('string');
+    expect(model.bricks).toEqual(sampleBricks);
   });
 });
