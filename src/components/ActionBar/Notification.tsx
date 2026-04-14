@@ -1,0 +1,27 @@
+import { useBrickStore } from '../../store/useBrickStore';
+
+/**
+ * Notification - success/error feedback overlay.
+ * FR-PERS-001: shows success notification after save.
+ * NFR-A11Y-001: role="status" for screen reader announcement.
+ */
+export function Notification() {
+  const notification = useBrickStore(state => state.notification);
+
+  if (!notification) return null;
+
+  const isError = notification.toLowerCase().startsWith('error');
+
+  return (
+    <div
+      data-testid="notification"
+      role="status"
+      aria-live="polite"
+      className={`absolute top-4 right-4 px-4 py-2 rounded shadow-lg text-sm font-medium z-10 ${
+        isError ? 'bg-red-600 text-white' : 'bg-green-600 text-white'
+      }`}
+    >
+      {notification}
+    </div>
+  );
+}
