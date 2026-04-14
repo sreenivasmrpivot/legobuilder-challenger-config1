@@ -88,6 +88,7 @@ test.describe('Export/Import Feature (FR-SHARE-001)', () => {
     await downloadPromise;
 
     // Perform import with valid file
+    const fileInput = page.locator('input[type="file"]');
     await fileInput.setInputFiles(SAMPLE_MODEL_PATH);
     await expect(page.locator('text=/\d+ bricks/')).toContainText('2 bricks', { timeout: 5000 });
 
