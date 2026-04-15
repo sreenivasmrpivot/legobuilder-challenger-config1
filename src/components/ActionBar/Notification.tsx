@@ -3,6 +3,7 @@ import { useBrickStore } from '../../store/useBrickStore';
 /**
  * Notification - success/error feedback overlay.
  * FR-PERS-001: shows success notification after save.
+ * FR-SHARE-001: shows error notification on import failure.
  * NFR-A11Y-001: role="status" for screen reader announcement.
  */
 export function Notification() {
@@ -10,7 +11,7 @@ export function Notification() {
 
   if (!notification) return null;
 
-  const isError = notification.toLowerCase().startsWith('error');
+  const isError = notification.toLowerCase().includes('error');
 
   return (
     <div
