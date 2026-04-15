@@ -69,4 +69,29 @@ describe('ActionBar', () => {
 
     expect(mockSaveModel).toHaveBeenCalledTimes(1);
   });
+
+  it('T-FE-PERS-001-03: Clicking Save shows success notification', async () => {
+    // Arrange: set some bricks in store
+    const bricks: Brick[] = [
+      { id: 'b1', x: 0, y: 0, z: 0, type: '1x1', colorId: 'bright-red', rotation: 0 },
+    ];
+    useBrickStore.setState({ bricks });
+
+    // Mock saveModel to resolve successfully
+    const mockSaveModel = vi.mocked(persistenceService.saveModel);
+    mockSaveModel.mockResolvedValueOnce(undefined);
+
+    render(<ActionBar />);
+
+    const saveButton = screen.getByTestId('btn-save');
+    fireEvent.click(saveButton);
+
+    // Wait for async save to complete and notification to appear
+    await waitFor(() => {
+      expect(screen.getByText('Model saved!')).toBeInTheDocument();
+    });
+
+    expect(mockSaveModel).toHaveBeenCalledTimes(1);
+    expect(mockSaveModel).toHaveBeenCalledWith(bricks);
+  });
 });
