@@ -1,0 +1,56 @@
+{
+  "handoff_id": "007_design_complete",
+  "from_agent": "design",
+  "to_agent": "gate-6a-design-review",
+  "timestamp": "2026-04-15T00:14:21Z",
+  "status": "complete",
+  "event": {
+    "event_id": "evt-007",
+    "event_type": "agent.handoff.completed"
+  },
+  "state_ref": {
+    "workflow_state_uri": "handoffs/007_design_complete.json"
+  },
+  "project": {
+    "name": "legobuilder-challenger-config1",
+    "type": "design"
+  },
+  "artifacts": [
+    {
+      "name": "low-level-design",
+      "path": "docs/features/FR-TOOL-001/LOW_LEVEL_DESIGN.md",
+      "type": "document",
+      "description": "LLD for FR-TOOL-001: Place Mode Tool"
+    }
+  ],
+  "summary": {
+    "work_completed": "Created Low-Level Design for FR-TOOL-001",
+    "key_findings": [],
+    "metrics": {}
+  },
+  "human_review_required": [
+    {
+      "item": "Design Document Approval",
+      "reason": "Gate 6a requires human review of the LLD before implementation proceeds",
+      "severity": "high"
+    }
+  ],
+  "next_agent_context": {
+    "recommended_actions": [
+      "Review the LLD for completeness and alignment with PRD/Technical Architecture",
+      "Verify that all acceptance criteria for FR-TOOL-001 are covered",
+      "Approve the PR or request changes"
+    ],
+    "files_to_read": [
+      "docs/features/FR-TOOL-001/LOW_LEVEL_DESIGN.md",
+      "docs/PRD.md",
+      "docs/TECHNICAL_ARCHITECTURE.md"
+    ]
+  },
+  "workflow_state": {
+    "workflow_type": "design",
+    "current_phase": "design",
+    "completed_phases": ["entry", "research", "architecture", "design"],
+    "remaining_phases": ["implementation", "evaluation", "release"]
+  }
+}
