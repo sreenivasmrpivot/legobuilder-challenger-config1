@@ -1,26 +1,40 @@
+/**
+ * Instanced Rendering Performance E2E Tests — FR-PERF-001
+ *
+ * Test IDs:
+ *   T-FE-PERF-001-02  — Scene renders 100 bricks at ≥ 60 FPS during camera orbit
+ *   T-PERF-PERF-001-01 — 500 bricks render at ≥ 30 FPS (Playwright + rAF timing)
+ *   T-PERF-SCALE-001-01 — 1,000-brick model loads without crash
+ *
+ * Spectra-FRs: FR-PERF-001
+ * Spectra-Tests: T-FE-PERF-001-02, T-PERF-PERF-001-01, T-PERF-SCALE-001-01
+ */
 import { test, expect, Page } from '@playwright/test';
 
-// Helper to generate brick data for import
-function generateBricks(count: number) {
-  const bricks = [];
-  for (let i = 0; i < count; i++) {
-    bricks.push({
-      id: `brick-${i}`,
-      x: i % 10,
-      y: 0,
-      z: Math.floor(i / 10),
-      type: '1x1',
-      colorId: 'bright-red',
-      rotation: 0,
-    });
-  }
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Generate a brick model JSON payload with `count` bricks. */
+function generateBrickModel(count: number) {
+  const bricks = Array.from({ length: count }, (_, i) => ({
+    id: `brick-${i}`,
+    x: i % 10,
+    y: 0,
+    z: Math.floor(i / 10),
+    type: '1x1' as const,
+    colorId: 'bright-red',
+    rotation: 0,
+  }));
   return { version: '1.0', bricks };
 }
 
-// Helper to measure FPS while orbiting camera
-async function measureFPSDuringOrbit(page: Page, durationMs: number): Promise<number> {
-  // Inject FPS measurement script
-  const fps = await page.evaluate(async (duration) => {
+/**
+ * Measure average FPS over `durationMs` using requestAnimationFrame.
+ * Runs entirely in the browser context via page.evaluate.
+ */
+async function measureFPS(page: Page, durationMs: number): Promise<number> {
+  return page.evaluate(async (duration: number) => {
     let frames = 0;
     const start = performance.now();
     return new Promise<number>((resolve) => {
@@ -34,130 +48,158 @@ async function measureFPSDuringOrbit(page: Page, durationMs: number): Promise<nu
       }
       requestAnimationFrame(tick);
     });
-  });
-  return fps;
+  }, durationMs);
 }
 
-// Helper to simulate camera orbit by dragging the canvas
-async function orbitCamera(page: Page, durationMs: number) {
-  const canvas = await page.locator('canvas');
+/**
+ * Simulate camera orbit by performing a circular mouse drag on the canvas.
+ * Runs for `durationMs` milliseconds.
+ */
+async function orbitCamera(page: Page, durationMs: number): Promise<void> {
+  const canvas = page.locator('canvas');
   const box = await canvas.boundingBox();
-  if (!box) throw new Error('Canvas not found');
+  if (!box) throw new Error('Canvas bounding box not found');
 
-  const centerX = box.x + box.width / 2;
-  const centerY = box.y + box.height / 2;
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
   const radius = Math.min(box.width, box.height) * 0.3;
 
-  // Perform a circular drag to orbit
-  await page.mouse.move(centerX + radius, centerY);
+  await page.mouse.move(cx + radius, cy);
   await page.mouse.down();
 
   const startTime = Date.now();
   while (Date.now() - startTime < durationMs) {
-    const angle = ((Date.now() - startTime) / durationMs) * Math.PI * 2;
-    const x = centerX + Math.cos(angle) * radius;
-    const y = centerY + Math.sin(angle) * radius;
-    await page.mouse.move(x, y);
-    await page.waitForTimeout(16); // ~60fps
+    const elapsed = Date.now() - startTime;
+    const angle = (elapsed / durationMs) * Math.PI * 2;
+    await page.mouse.move(
+      cx + Math.cos(angle) * radius,
+      cy + Math.sin(angle) * radius
+    );
+    await page.waitForTimeout(16); // ~60 fps tick
   }
 
   await page.mouse.up();
 }
 
+/**
+ * Import a brick model JSON file via the import button.
+ * Waits for the file chooser dialog and sets the file.
+ */
+async function importBrickModel(
+  page: Page,
+  model: ReturnType<typeof generateBrickModel>,
+  filename: string
+): Promise<void> {
+  const json = JSON.stringify(model);
+
+  // Trigger file chooser and set the file in one atomic operation
+  const [fileChooser] = await Promise.all([
+    page.waitForEvent('filechooser'),
+    page.click('[data-testid="btn-import"]'),
+  ]);
+
+  await fileChooser.setFiles([
+    {
+      name: filename,
+      mimeType: 'application/json',
+      buffer: Buffer.from(json),
+    },
+  ]);
+}
+
+// ---------------------------------------------------------------------------
+// Test suite
+// ---------------------------------------------------------------------------
+
 test.describe('Instanced Rendering Performance — FR-PERF-001', () => {
+  // Collect console errors during each test
+  const consoleErrors: string[] = [];
+
   test.beforeEach(async ({ page }) => {
-    await page.goto('/');
-    await page.waitForSelector('canvas', { timeout: 10000 });
-  });
+    consoleErrors.length = 0;
 
-  test('T-FE-PERF-001-02: Scene renders 100 bricks at ≥ 60 FPS during camera orbit', async ({ page }) => {
-    // Generate 100 bricks and import them
-    const bricks100 = generateBricks(100);
-    const blob = new Blob([JSON.stringify(bricks100)], { type: 'application/json' });
-    const file = new File([blob], 'bricks-100.json', { type: 'application/json' });
-
-    // Use the import button (assuming there's an import button with data-testid)
-    // We'll need to set up a file chooser
-    const [fileChooser] = await Promise.all([
-      page.waitForEvent('filechooser'),
-      page.click('[data-testid="btn-import"]'), // adjust selector as needed
-    ]);
-    await fileChooser.setFiles([file]);
-
-    // Wait for import to complete
-    await page.waitForTimeout(1000);
-
-    // Orbit camera for 2 seconds and measure FPS
-    const orbitDuration = 2000;
-    const fpsPromise = measureFPSDuringOrbit(page, orbitDuration);
-    await orbitCamera(page, orbitDuration);
-    const avgFps = await fpsPromise;
-
-    expect(avgFps).toBeGreaterThanOrEqual(60);
-  });
-
-  test('T-PERF-PERF-001-01: 500 bricks render at ≥ 30 FPS during camera orbit', async ({ page }) => {
-    const bricks500 = generateBricks(500);
-    const blob = new Blob([JSON.stringify(bricks500)], { type: 'application/json' });
-    const file = new File([blob], 'bricks-500.json', { type: 'application/json' });
-
-    const [fileChooser] = await Promise.all([
-      page.waitForEvent('filechooser'),
-      page.click('[data-testid="btn-import"]'),
-    ]);
-    await fileChooser.setFiles([file]);
-    await page.waitForTimeout(2000); // allow time to render
-
-    const orbitDuration = 5000;
-    const fpsPromise = measureFPSDuringOrbit(page, orbitDuration);
-    await orbitCamera(page, orbitDuration);
-    const avgFps = await fpsPromise;
-
-    expect(avgFps).toBeGreaterThanOrEqual(30);
-  });
-
-  test('T-PERF-SCALE-001-01: 1000-brick model loads without crash', async ({ page }) => {
-    const bricks1000 = generateBricks(1000);
-    const blob = new Blob([JSON.stringify(bricks1000)], { type: 'application/json' });
-    const file = new File([blob], 'bricks-1000.json', { type: 'application/json' });
-
-    // Import 1000 bricks
-    const [fileChooser] = await Promise.all([
-      page.waitForEvent('filechooser'),
-      page.click('[data-testid="btn-import"]'),
-    ]);
-    await fileChooser.setFiles([file]);
-
-    // Wait for import and rendering
-    await page.waitForTimeout(3000);
-
-    // Check for any console errors
-    const errors: string[] = [];
+    // Track WebGL / JS errors
     page.on('console', (msg) => {
-      if (msg.type() === 'error') {
-        errors.push(msg.text());
-      }
+      if (msg.type() === 'error') consoleErrors.push(msg.text());
     });
+    page.on('pageerror', (err) => consoleErrors.push(err.message));
 
-    // Verify that the scene contains 1000 bricks by checking the store via evaluate
-    const brickCount = await page.evaluate(() => {
-      // Access the store; this assumes the store is accessible via window or a global hook
-      // For now, we'll try to get it from the React component tree if there's a test hook
-      // If not, we might need to add a test-only global. But we can check the scene graph instead.
-      const canvas = document.querySelector('canvas');
-      const r3f = (canvas as any).__r3f;
-      if (!r3f) return 0;
-      const scene = r3f.scene;
-      let count = 0;
-      scene.traverse((obj: any) => {
-        if (obj instanceof THREE.InstancedMesh) {
-          count += obj.count;
-        }
-      });
-      return count;
-    });
-
-    expect(brickCount).toBe(1000);
-    expect(errors).toHaveLength(0);
+    await page.goto('/');
+    await page.waitForSelector('canvas', { timeout: 10_000 });
+    // Allow R3F to fully initialise
+    await page.waitForTimeout(500);
   });
+
+  // -------------------------------------------------------------------------
+  // T-FE-PERF-001-02 — 100 bricks at ≥ 60 FPS
+  // -------------------------------------------------------------------------
+  test(
+    'T-FE-PERF-001-02: Scene renders 100 bricks at ≥ 60 FPS during camera orbit',
+    async ({ page }) => {
+      await importBrickModel(page, generateBrickModel(100), 'bricks-100.json');
+      await page.waitForTimeout(1000); // allow render to settle
+
+      // Measure FPS and orbit simultaneously
+      const orbitDuration = 2000;
+      const [avgFps] = await Promise.all([
+        measureFPS(page, orbitDuration),
+        orbitCamera(page, orbitDuration),
+      ]);
+
+      expect(avgFps).toBeGreaterThanOrEqual(60);
+      expect(consoleErrors).toHaveLength(0);
+    }
+  );
+
+  // -------------------------------------------------------------------------
+  // T-PERF-PERF-001-01 — 500 bricks at ≥ 30 FPS
+  // -------------------------------------------------------------------------
+  test(
+    'T-PERF-PERF-001-01: 500 bricks render at ≥ 30 FPS during camera orbit',
+    async ({ page }) => {
+      await importBrickModel(page, generateBrickModel(500), 'bricks-500.json');
+      await page.waitForTimeout(2000); // allow render to settle
+
+      const orbitDuration = 5000;
+      const [avgFps] = await Promise.all([
+        measureFPS(page, orbitDuration),
+        orbitCamera(page, orbitDuration),
+      ]);
+
+      expect(avgFps).toBeGreaterThanOrEqual(30);
+      expect(consoleErrors).toHaveLength(0);
+    }
+  );
+
+  // -------------------------------------------------------------------------
+  // T-PERF-SCALE-001-01 — 1,000 bricks load without crash
+  // -------------------------------------------------------------------------
+  test(
+    'T-PERF-SCALE-001-01: 1,000-brick model loads without crash',
+    async ({ page }) => {
+      await importBrickModel(page, generateBrickModel(1000), 'bricks-1000.json');
+
+      // Allow time for full render
+      await page.waitForTimeout(3000);
+
+      // Verify scene contains 1000 instanced bricks
+      const totalBrickCount = await page.evaluate(() => {
+        const canvas = document.querySelector('canvas');
+        const r3f = (canvas as any)?.__r3f;
+        if (!r3f?.scene) return -1;
+
+        let count = 0;
+        r3f.scene.traverse((obj: any) => {
+          // THREE.InstancedMesh check via duck-typing (THREE may not be in scope)
+          if (obj.isInstancedMesh) count += obj.count;
+        });
+        return count;
+      });
+
+      expect(totalBrickCount).toBe(1000);
+
+      // Zero WebGL / JS errors
+      expect(consoleErrors).toHaveLength(0);
+    }
+  );
 });
